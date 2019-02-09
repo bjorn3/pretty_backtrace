@@ -26,6 +26,35 @@ fn the_hook(info: &PanicInfo) {
     eprintln!("thread '{}' panicked at '{}', {}", name, msg, location);
     eprintln!("stack backtrace:");
 
+    with_context(|context| {
+        let backtrace = backtrace::Backtrace::new_unresolved();
+        for (i, stack_frame) in backtrace.frames().iter().enumerate() {
+            let mut iter = context.find_frames(stack_frame.ip() as u64).unwrap();
+            let mut first_frame = true;
+            while let Some(frame) = iter.next().unwrap() {
+                let function_name = frame.function.map(|n|n.demangle().unwrap().to_string()).unwrap_or("<??>".to_string());
+
+                if first_frame {
+                    eprintln!("{:>4}: {:<80}  ({:p})", i, function_name, stack_frame.ip());
+                } else {
+                    eprintln!("      {}", function_name);
+                }
+
+                if let Some(location) = frame.location {
+                    print_location(location);
+                } else {
+                    eprintln!("             at <no debuginfo>");
+                }
+                first_frame = false;
+            }
+        }
+    });
+
+    eprintln!();
+    (*HOOK)(info);
+}
+
+fn with_context(f: impl FnOnce(&addr2line::Context)) {
     // Locate .dSYM dwarf debuginfo
     let bin_file_name = std::env::current_exe().expect("current bin");
     let dsym_dir = std::fs::read_dir(bin_file_name.parent().expect("parent"))
@@ -44,31 +73,7 @@ fn the_hook(info: &PanicInfo) {
     let debug_file = std::fs::read(debug_file_name).expect("read current bin");
     let debug_file = object::File::parse(&debug_file).expect("parse file");
     let context = addr2line::Context::new(&debug_file).expect("create context");
-
-    let backtrace = backtrace::Backtrace::new_unresolved();
-    for (i, stack_frame) in backtrace.frames().iter().enumerate() {
-        let mut iter = context.find_frames(stack_frame.ip() as u64).unwrap();
-        let mut first_frame = true;
-        while let Some(frame) = iter.next().unwrap() {
-            let function_name = frame.function.map(|n|n.demangle().unwrap().to_string()).unwrap_or("<??>".to_string());
-
-            if first_frame {
-                eprintln!("{:>4}: {:<80}  ({:p})", i, function_name, stack_frame.ip());
-            } else {
-                eprintln!("      {}", function_name);
-            }
-
-            if let Some(location) = frame.location {
-                print_location(location);
-            } else {
-                eprintln!("             at <no debuginfo>");
-            }
-            first_frame = false;
-        }
-    }
-
-    eprintln!();
-    (*HOOK)(info);
+    f(&context);
 }
 
 lazy_static::lazy_static! {
