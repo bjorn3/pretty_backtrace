@@ -1,0 +1,13 @@
+[package]
+name = "pretty_backtrace"
+version = "0.1.0"
+authors = ["bjorn3 <bjorn3@users.noreply.github.com>"]
+edition = "2018"
+
+[dependencies]
+addr2line = "0.8.0"
+object = "0.11.0"
+backtrace = "0.3.13"
+moria = { git = "https://github.com/gimli-rs/moria.git" }
+regex = "1.1.0"
+lazy_static = "1.2.0"
