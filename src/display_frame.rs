@@ -43,6 +43,17 @@ fn write_frame_line(i: FrameIndex, function_name: &str, addr: &Address, err: boo
 
 lazy_static::lazy_static! {
     static ref RUST_SOURCE: regex::Regex = regex::Regex::new("/rustc/\\w+/").unwrap();
+    static ref STD_SRC: Option<String> = {
+        if let Ok(output) = std::process::Command::new("rustc").arg("--print").arg("sysroot").output() {
+            if let Ok(sysroot) = String::from_utf8(output.stdout) {
+                Some(sysroot + "/lib/rustlib/src/rust/")
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
 }
 
 fn print_location(location: Option<addr2line::Location>) {
@@ -64,6 +75,12 @@ fn print_location(location: Option<addr2line::Location>) {
         (Some(line), None) => eprintln!("      --> {}:{}", file, line),
         (None, _) => eprintln!("      --> {}", file),
     }
+
+    let file = if let Some(std_src) = &*STD_SRC {
+        file.replace("<rust>", std_src)
+    } else {
+        file
+    };
 
     if !file.starts_with("<") {
         if let Some(line) = location.line {
