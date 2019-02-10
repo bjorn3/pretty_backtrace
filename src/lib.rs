@@ -3,6 +3,7 @@ extern crate rental;
 
 mod display_frame;
 mod syntax_highlight;
+mod locate_debuginfo;
 
 use std::fmt;
 use std::panic::{PanicInfo, set_hook, take_hook};
@@ -39,20 +40,19 @@ fn the_hook(info: &PanicInfo) {
     let location = info.location().unwrap();
     eprintln!("thread '{}' \x1b[91m\x1b[1mpanicked\x1b[0m at '{}', {}", name, msg, location);
 
-    with_context(|context| {
-        let backtrace = backtrace::Backtrace::new_unresolved();
-        eprintln!("stack backtrace:");
-        for (i, stack_frame) in backtrace.frames().iter().enumerate().map(|(i, frame)| (FrameIndex(i), frame)) {
-            let addr = if let Some(addr) = Address::from_avma(Avma(stack_frame.ip() as *const u8)) {
-                addr
-            } else {
-                eprintln!("{} \x1b[91m<could not get svma> ({:p})\x1b[0m", i, stack_frame.ip());
-                continue;
-            };
+    let context = locate_debuginfo::get_context();
+    let backtrace = backtrace::Backtrace::new_unresolved();
+    eprintln!("stack backtrace:");
+    for (i, stack_frame) in backtrace.frames().iter().enumerate().map(|(i, frame)| (FrameIndex(i), frame)) {
+        let addr = if let Some(addr) = Address::from_avma(Avma(stack_frame.ip() as *const u8)) {
+            addr
+        } else {
+            eprintln!("{} \x1b[91m<could not get svma> ({:p})\x1b[0m", i, stack_frame.ip());
+            continue;
+        };
 
-            display_frame::display_frame(context, i, addr);
-        }
-    });
+        display_frame::display_frame(&context, i, addr);
+    }
 
     eprintln!();
     (*HOOK)(info);
@@ -99,26 +99,4 @@ impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:016p} = {:016p}@{}", self.svma.0, self.avma.0, self.lib_file.file_name().unwrap().to_string_lossy())
     }
-}
-
-fn with_context(f: impl FnOnce(&addr2line::Context)) {
-    // Locate .dSYM dwarf debuginfo
-    let bin_file_name = std::env::current_exe().expect("current bin");
-    let dsym_dir = std::fs::read_dir(bin_file_name.parent().expect("parent"))
-        .unwrap()
-        .map(|p| p.unwrap().path())
-        .filter(|p| p.extension() == Some(std::ffi::OsStr::new("dSYM")))
-        .next()
-        .unwrap();
-    let debug_file_name = std::fs::read_dir(dsym_dir.join("Contents/Resources/DWARF"))
-        .unwrap()
-        .next()
-        .unwrap()
-        .unwrap()
-        .path();
-
-    let debug_file = std::fs::read(debug_file_name).expect("read current bin");
-    let debug_file = object::File::parse(&debug_file).expect("parse file");
-    let context = addr2line::Context::new(&debug_file).expect("create context");
-    f(&context);
 }
