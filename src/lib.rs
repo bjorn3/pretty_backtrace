@@ -1,8 +1,11 @@
 #[macro_use]
 extern crate rental;
 
+use std::fmt;
 use std::panic::{PanicInfo, set_hook, take_hook};
 use std::path::PathBuf;
+
+use findshlibs::{Avma, Svma, SharedLibrary, Segment};
 
 mod syntax_highlight;
 
@@ -32,29 +35,44 @@ fn the_hook(info: &PanicInfo) {
     eprintln!("thread '{}' \x1b[91m\x1b[1mpanicked\x1b[0m at '{}', {}", name, msg, location);
     eprintln!("stack backtrace:");
 
+    if !findshlibs::TARGET_SUPPORTED {
+        (*HOOK)(info);
+        return;
+    }
+
     with_context(|context| {
         let backtrace = backtrace::Backtrace::new_unresolved();
-        for (i, stack_frame) in backtrace.frames().iter().enumerate() {
-            let mut iter = context.find_frames(stack_frame.ip() as u64).unwrap();
+        for (i, stack_frame) in backtrace.frames().iter().enumerate().map(|(i, frame)| (FrameIndex(i), frame)) {
+            let addr = if let Some(addr) = Address::from_avma(Avma(stack_frame.ip() as *const u8)) {
+                addr
+            } else {
+                eprintln!("{} \x1b[91m<could not get svma> ({:p})\x1b[0m", i, stack_frame.ip());
+                continue;
+            };
+
+            let mut iter = context.find_frames(addr.svma.0 as u64).unwrap();
             let mut first_frame = true;
             while let Some(frame) = iter.next().unwrap() {
                 let function_name = frame.function.map(|n|n.demangle().unwrap().to_string()).unwrap_or("<??>".to_string());
 
                 if first_frame {
-                    eprintln!("\x1b[2m{:>4}:\x1b[0m {:<80}  \x1b[2m({:p})\x1b[0m", i, function_name, stack_frame.ip());
+                    write_frame_line(i, &function_name, &addr, false);
                 } else {
                     eprintln!("      {}", function_name);
                 }
 
-                if let Some(location) = frame.location {
-                    print_location(location);
-                } else {
-                    eprintln!("             at <no debuginfo>");
-                }
+                print_location(frame.location);
+
                 first_frame = false;
             }
 
-            if i % 100 == 99 {
+            if first_frame == true {
+                // No debug info
+                write_frame_line(i, "<missing debuginfo>", &addr, true);
+            }
+
+            // Wait a second each 100 frames to prevent filling the screen in case of a stackoverflow
+            if i.0 % 100 == 99 {
                 eprintln!("Backtrace is very big, sleeping 1s...");
                 ::std::thread::sleep_ms(1000);
             }
@@ -63,6 +81,59 @@ fn the_hook(info: &PanicInfo) {
 
     eprintln!();
     (*HOOK)(info);
+}
+
+#[derive(Copy, Clone)]
+struct FrameIndex(usize);
+
+impl fmt::Display for FrameIndex {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "\x1b[2m{:>4}:\x1b[0m", self.0)
+    }
+}
+
+fn write_frame_line(i: FrameIndex, function_name: &str, addr: &Address, err: bool) {
+    eprintln!(
+        "{} {}{:<80}\x1b[0m  \x1b[2m({})\x1b[0m",
+        i,
+        if err { "\x1b[91m" } else { "" },
+        function_name,
+        addr,
+    );
+}
+
+#[derive(Clone)]
+struct Address {
+    avma: Avma,
+    svma: Svma,
+    lib_file: PathBuf,
+}
+
+impl Address {
+    fn from_avma(avma: Avma) -> Option<Self> {
+        let mut res = None;
+        findshlibs::TargetSharedLibrary::each(|shlib| {
+            for seg in shlib.segments() {
+                if seg.contains_avma(shlib, avma) {
+                    let svma = shlib.avma_to_svma(avma);
+                    assert!(res.is_none());
+                    res = Some(Address {
+                        avma,
+                        svma,
+                        lib_file: PathBuf::from(shlib.name().to_string_lossy().into_owned()),
+                    });
+                }
+            }
+        });
+
+        res
+    }
+}
+
+impl fmt::Display for Address {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:016p} = {:016p}@{}", self.svma.0, self.avma.0, self.lib_file.file_name().unwrap().to_string_lossy())
+    }
 }
 
 fn with_context(f: impl FnOnce(&addr2line::Context)) {
@@ -91,12 +162,20 @@ lazy_static::lazy_static! {
     static ref RUST_SOURCE: regex::Regex = regex::Regex::new("/rustc/\\w+/").unwrap();
 }
 
-fn print_location(location: addr2line::Location) {
+fn print_location(location: Option<addr2line::Location>) {
+    let location = if let Some(location) = location {
+        location
+    } else {
+        eprintln!("             at <no debuginfo>");
+        return;
+    };
+
     let file = if let Some(file) = &location.file {
         RUST_SOURCE.replace(file, "<rust>/").to_string()
     } else {
         "<???>".to_string()
     };
+
     match (location.line, location.column) {
         (Some(line), Some(column)) => eprintln!("      --> {}:{}:{}", file, line, column),
         (Some(line), None) => eprintln!("      --> {}:{}", file, line),
