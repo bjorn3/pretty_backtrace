@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use std::path::PathBuf;
 
 use syntect::easy::HighlightLines;
-use syntect::highlighting::{Color, Style, ThemeSet};
+use syntect::highlighting::{Style, ThemeSet};
 use syntect::parsing::SyntaxSet;
 
 use self::rent_highlight_cache::*;
