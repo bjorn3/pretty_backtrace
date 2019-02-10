@@ -186,18 +186,15 @@ fn print_location(location: Option<addr2line::Location>) {
         if let Some(line) = location.line {
             syntax_highlight::with_highlighted_source(PathBuf::from(file.clone()), move |highlighted| {
                 for (line_num, line_str) in highlighted.iter().enumerate().map(|(line_num, line_str)|(line_num as u64 + 1, line_str)) {
-                //if let Ok(file_content) = std::fs::read_to_string(&file) {
-                //    for (line_num, line_str) in file_content.lines().enumerate().map(|(line_num, line_str)|(line_num as u64 + 1, line_str)) {
-                        if line_num < line - 2 || line_num > line + 2 {
-                            continue;
-                        }
+                    if line_num < line - 2 || line_num > line + 2 {
+                        continue;
+                    }
 
-                        let line_marker = if line_num as u64 == line { "\x1b[91m>\x1b[0m" } else { " \x1b[2m" };
-                        eprintln!("{} {:>6} | {}", line_marker, line_num, syntax_highlight::as_24_bit_terminal_escaped(line_str, false));
-                        if line_num as u64 == line {
-                            eprintln!("         | {:width$}\x1b[91m^\x1b[0m", " ", width=location.column.unwrap() as usize);
-                        }
-                //    }
+                    let line_marker = if line_num as u64 == line { "\x1b[91m>\x1b[0m" } else { " \x1b[2m" };
+                    eprintln!("{} {:>6} | {}", line_marker, line_num, syntax_highlight::as_16_bit_terminal_escaped(line_str));
+                    if line_num as u64 == line {
+                        eprintln!("         | {:width$}\x1b[91m^\x1b[0m", " ", width=location.column.unwrap() as usize);
+                    }
                 }
             });
         }

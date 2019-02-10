@@ -50,7 +50,6 @@ pub fn with_highlighted_source(file: PathBuf, f: impl FnOnce(&[Vec<(Style, &str)
 
 fn syntax_highlight(src: &str) -> Vec<Vec<(Style, &str)>> {
     let t = &THEME_SET.themes["Solarized (dark)"];
-    let bg_color = t.settings.background.unwrap_or(Color::WHITE);
     let mut h = HighlightLines::new(&SYNTAX_SET.find_syntax_by_extension("rs").unwrap().to_owned(), t);
 
     let mut lines = Vec::new();
@@ -60,7 +59,7 @@ fn syntax_highlight(src: &str) -> Vec<Vec<(Style, &str)>> {
     lines
 }
 
-pub fn as_24_bit_terminal_escaped(v: &[(Style, &str)], bg: bool) -> String {
+pub fn as_16_bit_terminal_escaped(v: &[(Style, &str)]) -> String {
     use std::fmt::Write;
 
     let mut s: String = String::new();
