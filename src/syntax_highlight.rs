@@ -29,23 +29,28 @@ rental! {
     }
 }
 
-pub fn with_highlighted_source(file: PathBuf, f: impl FnOnce(&[Vec<(Style, &str)>])) {
-    CACHED_HIGHLIGHTED_FILES
+pub fn with_highlighted_source(file: PathBuf, f: impl FnOnce(Option<&[Vec<(Style, &str)>]>)) {
+    let mut cached_highlighted_files = CACHED_HIGHLIGHTED_FILES
         .lock()
-        .unwrap()
-        .entry(file.clone())
+        // Panicking during syntax highlight or the callback will not result in an invalid state
+        // for the cache, because both don't mutate the cache.
+        .unwrap_or_else(|e| e.into_inner());
+
+    let entry = cached_highlighted_files.entry(file.clone())
         .or_insert_with(|| {
-            if let Ok(src) = std::fs::read_to_string(&file) {
+            if let Ok(src) = std::fs::read_to_string(file) {
                 Some(HighlightCacheEntry::new(src, |src| {
                     syntax_highlight(src)
                 }))
             } else {
                 None
             }
-        })
-        .as_ref()
-        .unwrap()
-        .rent(|highlighted| f(highlighted));
+        });
+
+    match entry {
+        Some(entry) => entry.rent(|highlighted| f(Some(highlighted))),
+        None => f(None)
+    }
 }
 
 fn syntax_highlight(src: &str) -> Vec<Vec<(Style, &str)>> {

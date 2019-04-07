@@ -85,6 +85,13 @@ fn print_location(location: Option<addr2line::Location>) {
     if !file.starts_with("<") {
         if let Some(line) = location.line {
             crate::syntax_highlight::with_highlighted_source(PathBuf::from(file.clone()), move |highlighted| {
+                let highlighted = if let Some(highlighted) = highlighted {
+                    highlighted
+                } else {
+                    eprintln!("          \x1b[91m<file not found>\x1b[0m");
+                    return;
+                };
+
                 for (line_num, line_str) in highlighted.iter().enumerate().map(|(line_num, line_str)|(line_num as u64 + 1, line_str)) {
                     if line_num < line - 2 || line_num > line + 2 {
                         continue;
