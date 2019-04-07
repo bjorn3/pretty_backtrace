@@ -113,6 +113,10 @@ impl Address {
 
 impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:016p} = {:016p}@{}", self.svma.0, self.avma.0, self.lib_file.file_name().unwrap().to_string_lossy())
+        let file_name = self.lib_file
+            .file_name()
+            .map(|s| s.to_string_lossy())
+            .unwrap_or(self.lib_file.display().to_string().into());
+        write!(f, "{:016p} = {:016p}@{}", self.svma.0, self.avma.0, file_name)
     }
 }
