@@ -5,6 +5,7 @@ mod display_frame;
 mod syntax_highlight;
 mod locate_debuginfo;
 
+use std::cell::Cell;
 use std::fmt;
 use std::panic::{PanicInfo, set_hook, take_hook};
 use std::path::PathBuf;
@@ -19,6 +20,10 @@ lazy_static::lazy_static! {
     };
 }
 
+thread_local! {
+    static IS_PROCESSING_PANIC: Cell<bool> = Cell::new(false);
+}
+
 pub fn setup() {
     if !findshlibs::TARGET_SUPPORTED {
         eprintln!("findshlibs doesn't support your platform, using default panic hook");
@@ -28,6 +33,15 @@ pub fn setup() {
 }
 
 fn the_hook(info: &PanicInfo) {
+    IS_PROCESSING_PANIC.with(|is_processing_panic| {
+        if is_processing_panic.get() {
+            println!("\x1b[0m"); // Reset colors
+            (*HOOK)(info);
+            std::process::abort();
+        }
+        is_processing_panic.set(true);
+    });
+
     let thread = std::thread::current();
     let name = thread.name().unwrap_or("<unnamed>");
     let msg = match info.payload().downcast_ref::<&'static str>() {
@@ -56,6 +70,8 @@ fn the_hook(info: &PanicInfo) {
 
     eprintln!();
     (*HOOK)(info);
+
+    IS_PROCESSING_PANIC.with(|is_processing_panic| is_processing_panic.set(false));
 }
 
 #[derive(Copy, Clone)]
