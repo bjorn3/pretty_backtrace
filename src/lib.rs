@@ -98,10 +98,16 @@ impl Address {
                 if seg.contains_avma(shlib, avma) {
                     let svma = shlib.avma_to_svma(avma);
                     assert!(res.is_none());
+                    let lib_file = shlib.name().to_string_lossy().into_owned();
+                    let lib_file = if lib_file.is_empty() {
+                        std::env::current_exe().unwrap_or_else(|_| PathBuf::from("<current exe>"))
+                    } else {
+                        PathBuf::from(lib_file)
+                    };
                     res = Some(Address {
                         avma,
                         svma,
-                        lib_file: PathBuf::from(shlib.name().to_string_lossy().into_owned()),
+                        lib_file,
                     });
                 }
             }
