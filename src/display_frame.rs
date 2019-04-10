@@ -21,7 +21,15 @@ pub(crate) fn display_frame(context: &addr2line::Context, i: FrameIndex, addr: A
 
     if first_frame == true {
         // No debug info
-        write_frame_line(i, "<missing debuginfo>", &addr, true);
+        backtrace::resolve(addr.avma.0 as *mut _, |symbol| {
+            if let Some(symbol_name) = symbol.name() {
+                let mangled_name = symbol_name.as_str().unwrap();
+                let name = addr2line::demangle_auto(mangled_name.into(), None);
+                write_frame_line(i, &name, &addr, false);
+            } else {
+                write_frame_line(i, "<unknown function name>", &addr, true);
+            }
+        });
     }
 
     // Wait a second each 100 frames to prevent filling the screen in case of a stackoverflow

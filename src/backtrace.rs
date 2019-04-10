@@ -10,7 +10,12 @@ pub fn print_backtrace() {
         let addr = if let Some(addr) = Address::from_avma(Avma(stack_frame.ip() as *const u8)) {
             addr
         } else {
-            eprintln!("{} \x1b[91m<could not get svma> ({:p})\x1b[0m", i, stack_frame.ip());
+            if stack_frame.ip() as usize == 0 {
+                eprintln!("{} \x1b[2m<end of stack> (0)\x1b[0m", i);
+            } else {
+                eprintln!("{} \x1b[91m<could not get svma> ({:016p})\x1b[0m", i, stack_frame.ip());
+            }
+
             continue;
         };
 
