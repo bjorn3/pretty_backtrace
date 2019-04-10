@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate rental;
 
+mod backtrace;
 mod display_frame;
 mod syntax_highlight;
 mod locate_debuginfo;
@@ -55,19 +56,7 @@ fn the_hook(info: &PanicInfo) {
     eprintln!("thread '{}' \x1b[91m\x1b[1mpanicked\x1b[0m at '{}', {}", name, msg, location);
     eprintln!("stack backtrace:");
 
-    let context = locate_debuginfo::get_context();
-
-    let backtrace = backtrace::Backtrace::new_unresolved();
-    for (i, stack_frame) in backtrace.frames().iter().enumerate().map(|(i, frame)| (FrameIndex(i), frame)) {
-        let addr = if let Some(addr) = Address::from_avma(Avma(stack_frame.ip() as *const u8)) {
-            addr
-        } else {
-            eprintln!("{} \x1b[91m<could not get svma> ({:p})\x1b[0m", i, stack_frame.ip());
-            continue;
-        };
-
-        display_frame::display_frame(&context, i, addr);
-    }
+    crate::backtrace::print_backtrace();
 
     eprintln!();
     (*HOOK)(info);
