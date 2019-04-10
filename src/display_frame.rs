@@ -54,7 +54,7 @@ lazy_static::lazy_static! {
     static ref STD_SRC: Option<String> = {
         if let Ok(output) = std::process::Command::new("rustc").arg("--print").arg("sysroot").output() {
             if let Ok(sysroot) = String::from_utf8(output.stdout) {
-                Some(sysroot + "/lib/rustlib/src/rust/")
+                Some(sysroot.trim().to_string() + "/lib/rustlib/src/rust")
             } else {
                 None
             }
