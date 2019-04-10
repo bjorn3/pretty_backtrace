@@ -5,13 +5,7 @@ pretty_backtrace::setup();
 panic!("Bomb!");
 ```
 
-![screenshot](screenshot.png)
+Pretty backtraces are normally only enabled when `RUST_BACKTRACE=pretty` to prevent breaking tools
+which parse printed backtraces. If you want to always enable pretty backtraces use `force_setup`.
 
-> This may break tools depending on a specific backtrace format. You may wish to only enable this
-> when a certain env var is set:
->
-> ```rust
-> if std::env::var("PRETTY_BACKTRACE").is_ok() {
->     pretty_backtrace::setup();
-> }
-> ```
+![screenshot](screenshot.png)

@@ -25,7 +25,17 @@ thread_local! {
     static IS_PROCESSING_PANIC: Cell<bool> = Cell::new(false);
 }
 
+/// Enable pretty backtraces for the current thread if the `RUST_BACKTRACE` env var is set to `pretty`.
 pub fn setup() {
+    if let Ok(val) = std::env::var("RUST_BACKTRACE") {
+        if val == "pretty" {
+            force_setup();
+        }
+    }
+}
+
+/// Always enable pretty backtraces for the current thread.
+pub fn force_setup() {
     if !findshlibs::TARGET_SUPPORTED {
         eprintln!("findshlibs doesn't support your platform, using default panic hook");
     } else {
