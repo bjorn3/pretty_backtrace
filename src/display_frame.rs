@@ -14,7 +14,9 @@ pub(crate) fn display_frame(context: &addr2line::Context, i: FrameIndex, addr: A
             eprintln!("      {}", function_name);
         }
 
-        print_location(frame.location);
+        let show_source = !function_name.starts_with("pretty_backtrace::");
+
+        print_location(frame.location, show_source);
 
         first_frame = false;
     }
@@ -64,7 +66,7 @@ lazy_static::lazy_static! {
     };
 }
 
-fn print_location(location: Option<addr2line::Location>) {
+fn print_location(location: Option<addr2line::Location>, mut show_source: bool) {
     let location = if let Some(location) = location {
         location
     } else {
@@ -84,13 +86,17 @@ fn print_location(location: Option<addr2line::Location>) {
         (None, _) => eprintln!("      --> {}", file),
     }
 
+    if file.starts_with("<rust>") {
+        show_source = false;
+    }
+
     let file = if let Some(std_src) = &*STD_SRC {
         file.replace("<rust>", std_src)
     } else {
         file
     };
 
-    if !file.starts_with("<") {
+    if show_source {
         if let Some(line) = location.line {
             crate::syntax_highlight::with_highlighted_source(PathBuf::from(file.clone()), move |highlighted| {
                 let highlighted = if let Some(highlighted) = highlighted {
