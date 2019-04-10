@@ -53,10 +53,11 @@ fn the_hook(info: &PanicInfo) {
     };
     let location = info.location().unwrap();
     eprintln!("thread '{}' \x1b[91m\x1b[1mpanicked\x1b[0m at '{}', {}", name, msg, location);
+    eprintln!("stack backtrace:");
 
     let context = locate_debuginfo::get_context();
+
     let backtrace = backtrace::Backtrace::new_unresolved();
-    eprintln!("stack backtrace:");
     for (i, stack_frame) in backtrace.frames().iter().enumerate().map(|(i, frame)| (FrameIndex(i), frame)) {
         let addr = if let Some(addr) = Address::from_avma(Avma(stack_frame.ip() as *const u8)) {
             addr
@@ -123,6 +124,6 @@ impl fmt::Display for Address {
             .file_name()
             .map(|s| s.to_string_lossy())
             .unwrap_or(self.lib_file.display().to_string().into());
-        write!(f, "{:016p} = {:016p}@{}", self.svma.0, self.avma.0, file_name)
+        write!(f, "{:016p} = {:016p}@{}", self.avma.0, self.svma.0, file_name)
     }
 }
