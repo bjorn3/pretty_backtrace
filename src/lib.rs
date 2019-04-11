@@ -1,10 +1,13 @@
 #[macro_use]
 extern crate rental;
+#[macro_use]
+extern crate mopa;
 
 mod backtrace;
 mod display_frame;
 mod syntax_highlight;
 mod locate_debuginfo;
+mod values;
 
 use std::cell::Cell;
 use std::fmt;
@@ -12,6 +15,8 @@ use std::panic::{PanicInfo, set_hook, take_hook};
 use std::path::PathBuf;
 
 use findshlibs::{Avma, Svma, SharedLibrary, Segment};
+
+pub use values::BacktraceContext;
 
 lazy_static::lazy_static! {
     static ref HOOK: Box<for<'a> Fn(&'a PanicInfo) + Sync + Send + 'static> = {
@@ -67,6 +72,7 @@ fn the_hook(info: &PanicInfo) {
     eprintln!("stack backtrace:");
 
     crate::backtrace::print_backtrace();
+    crate::values::print_context();
 
     eprintln!();
     (*HOOK)(info);

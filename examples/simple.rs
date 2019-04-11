@@ -4,5 +4,7 @@ fn main() {
 }
 
 fn please_panic(num: u64) {
+    pretty_backtrace::backtrace_context!(num);
+
     panic!("Some message");
 }
