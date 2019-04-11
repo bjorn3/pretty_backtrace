@@ -55,7 +55,8 @@ impl<T: Debug> Drop for BacktraceContext<T> {
     fn drop(&mut self) {
         CONTEXTS.with(|contexts| {
             let mut contexts = contexts.borrow_mut();
-            contexts.pop();
+            let (_avma, context) = contexts.pop().unwrap();
+            assert!(Rc::ptr_eq(&self.0, &context));
         });
     }
 }
