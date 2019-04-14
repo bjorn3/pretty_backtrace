@@ -1,5 +1,7 @@
 # Pretty backtraces for rust
 
+[![Cargo](https://img.shields.io/crates/v/pretty_backtrace.svg)](https://crates.io/crates/pretty_backtrace)
+
 ```rust
 pretty_backtrace::setup();
 panic!("Bomb!");
