@@ -6,13 +6,15 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/bjorn3/pretty_backtrace"
 documentation = "https://docs.rs/pretty_backtrace"
+readme = "./README.md"
 description = """
 Pretty colored backtraces for Rust.
 """
 
 [dependencies]
+findshlibs = "0.4.0"
+moria = { git = "https://github.com/gimli-rs/moria", commit = "83e27832cd70f33ce835726d6b91f064ae0cb50f" }
 object = "0.11.0"
-gimli = "0.16.1"
 addr2line = "0.8.0"
 
 backtrace = "0.3.13"
@@ -21,5 +23,5 @@ regex = "1.1.0"
 lazy_static = "1.2.0"
 syntect = "3.0.2"
 rental = "0.5.2"
-findshlibs = "0.4.0"
 libc = "0.2.51"
+failure = "0.1.5"
