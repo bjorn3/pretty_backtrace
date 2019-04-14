@@ -13,7 +13,7 @@ rust:
 
 script:
   - cargo test
-  - cargo run --example simple
+  - cargo run --example simple || true
 
 env:
 - RUST_BACKTRACE=pretty
