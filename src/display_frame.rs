@@ -34,6 +34,8 @@ pub(crate) fn display_frame(context: &crate::Context, i: FrameIndex, addr: Addre
         });
     }
 
+    print_values(context, addr.svma);
+
     // Wait a second each 100 frames to prevent filling the screen in case of a stackoverflow
     if i.0 % 100 == 99 {
         eprintln!("Backtrace is very big, sleeping 1s...");
@@ -120,4 +122,103 @@ fn print_location(location: Option<addr2line::Location>, mut show_source: bool) 
             });
         }
     }
+}
+
+type Slice = gimli::EndianRcSlice<gimli::RunTimeEndian>;
+
+fn print_values(context: &crate::Context, svma: findshlibs::Svma) {
+    use gimli::read::Reader;
+    let unit = if let Some(unit) = find_unit_for_svma(&context.dwarf, svma) {
+        unit
+    } else {
+        return;
+    };
+    find_die_for_svma(&context.dwarf, &unit, svma, |entry| {
+        let mut entries_tree = unit.entries_tree(Some(entry.offset())).unwrap();
+        process_tree(&context.dwarf, &unit, entries_tree.root().unwrap(), 0);
+
+        fn process_tree(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, mut node: gimli::EntriesTreeNode<Slice>, indent: usize) {
+            {
+                let entry = node.entry();
+                println!("{:indent$}{:?}", "", entry.tag().static_string(), indent = indent);
+
+                if entry.tag() == gimli::DW_TAG_formal_parameter || entry.tag() == gimli::DW_TAG_variable {
+                    let name = if let Some(name) = entry.attr(gimli::DW_AT_name).unwrap() {
+                        name.string_value(&dwarf.debug_str).unwrap().to_string().unwrap().into_owned()
+                    } else {
+                        "<unknown name>".to_string()
+                    };
+                    println!("{:indent$}name: {}", "", name, indent = indent);
+
+                    let exprloc = if let Some(exprloc) = entry.attr(gimli::DW_AT_location).unwrap() {
+                        let exprloc = match exprloc.value() {
+                            gimli::AttributeValue::Block(data) => gimli::Expression(data),
+                            gimli::AttributeValue::Exprloc(exprloc) => exprloc,
+                            gimli::AttributeValue::LocationListsRef(loclistref) => {
+                                //dwarf.locations(unit, loclistref);
+                                println!("warning: unhandled location list");
+                                return;
+                            },
+                            _ => panic!("{:?}", exprloc.value()),
+                        };
+                        let mut eval = exprloc.clone().evaluation(unit.encoding());
+                        println!("{:indent$}exprloc: {:?}", "", eval.evaluate().unwrap(), indent = indent);
+                        Some(exprloc)
+                    } else {
+                        None
+                    };
+
+                    let mut attrs = entry.attrs();
+                    while let Some(attr) = attrs.next().unwrap() {
+                        println!("{:indent$}attr {:?} = ???", "", attr.name().static_string(), indent = indent);
+                        //println!("Attribute value = {:?}", attr.value());
+                    }
+                }
+            }
+            let mut children = node.children();
+            while let Some(child) = children.next().unwrap() {
+                // Recursively process a child.
+                process_tree(dwarf, unit, child, indent + 4);
+            }
+        }
+    }).unwrap();
+}
+
+fn find_unit_for_svma(dwarf: &gimli::Dwarf<Slice>, svma: findshlibs::Svma) -> Option<gimli::read::Unit<Slice>> {
+    let mut units = dwarf.units();
+    while let Some(unit) = units.next().unwrap() {
+        let unit = gimli::read::Unit::new(&dwarf, unit).unwrap();
+        let mut ranges = dwarf.unit_ranges(&unit).unwrap();
+        while let Some(range) = ranges.next().unwrap() {
+            if range.begin <= svma.0 as u64 && range.end > svma.0 as u64 {
+                return Some(unit);
+            }
+        }
+    }
+    None
+}
+
+fn find_die_for_svma<'dwarf, 'unit: 'dwarf, T, F: FnMut(gimli::read::DebuggingInformationEntry<'dwarf, 'unit, Slice>) -> T>(dwarf: &'dwarf gimli::Dwarf<Slice>, unit: &'unit gimli::Unit<Slice>, svma: findshlibs::Svma, mut f: F) -> Option<T> {
+    fn process_tree<'dwarf, 'unit: 'dwarf, T, F: FnMut(gimli::DebuggingInformationEntry<'dwarf, 'unit, Slice>) -> T>(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, node: gimli::EntriesTreeNode<'dwarf, 'unit, '_, Slice>, svma: findshlibs::Svma, f: &mut F) -> Option<T> {
+        let entry = node.entry().clone();
+        let mut children = node.children();
+        while let Some(child) = children.next().unwrap() {
+            // Recursively process a child.
+            if let Some(val) = process_tree(dwarf, unit, child, svma, f) {
+                return Some(val);
+            }
+        }
+
+        let mut ranges = dwarf.die_ranges(unit, &entry).unwrap();
+        while let Some(range) = ranges.next().unwrap() {
+            if range.begin <= svma.0 as u64 && range.end > svma.0 as u64 {
+                return Some(f(entry));
+            }
+        }
+
+        None
+    }
+
+    let mut entries_tree = unit.entries_tree(None).unwrap();
+    process_tree(&dwarf, &unit, entries_tree.root().unwrap(), svma, &mut f)
 }
