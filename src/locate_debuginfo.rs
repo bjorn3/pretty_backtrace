@@ -38,35 +38,13 @@ pub fn get_context_for_file(file_name: &Path) -> Context {
         gimli::RunTimeEndian::Big
     };
 
-    fn load_section<'data, 'file, O, S, Endian>(file: &'file O, endian: Endian) -> S
-    where
-        O: object::Object<'data, 'file>,
-        S: gimli::Section<gimli::EndianRcSlice<Endian>>,
-        Endian: gimli::Endianity,
-    {
-        let data = file.section_data_by_name(S::section_name()).unwrap_or(Cow::Borrowed(&[]));
-        S::from(gimli::EndianRcSlice::new(Rc::from(&*data), endian))
-    }
-
-    let dwarf = gimli::read::Dwarf {
-        debug_abbrev: load_section(&debug_file, endian),
-        debug_addr: load_section(&debug_file, endian),
-        debug_info: load_section(&debug_file, endian),
-        debug_line: load_section(&debug_file, endian),
-        debug_line_str: load_section(&debug_file, endian),
-        debug_str: load_section(&debug_file, endian),
-        debug_str_offsets: load_section(&debug_file, endian),
-        debug_str_sup: gimli::EndianRcSlice::new(Rc::new([]), endian).into(),
-        debug_types: load_section(&debug_file, endian),
-        locations: gimli::LocationLists::new(
-            load_section(&debug_file, endian),
-            load_section(&debug_file, endian),
-        ),
-        ranges: gimli::RangeLists::new(
-            load_section(&debug_file, endian),
-            load_section(&debug_file, endian),
-        ),
-    };
+    let dwarf = gimli::read::Dwarf::load(
+        |sect_id| {
+            let data = debug_file.section_data_by_name(sect_id.name()).unwrap_or(Cow::Borrowed(&[]));
+            Ok(gimli::EndianRcSlice::new(Rc::from(&*data), endian))
+        },
+        |_| Ok::<_, ()>(gimli::EndianRcSlice::new(Rc::from([]), endian)),
+    ).unwrap();
 
     Context {
         addr2line,
