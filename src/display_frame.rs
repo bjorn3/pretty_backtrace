@@ -213,7 +213,6 @@ fn print_local(
         let mut eval = exprloc.clone().evaluation(unit.encoding());
         let mut res = eval.evaluate().unwrap();
         loop {
-            println!("{:indent$}eval: {:?}", "", res, indent = indent);
             match res {
                 gimli::EvaluationResult::Complete => {
                     let result = eval.result();
@@ -247,7 +246,7 @@ fn print_local(
                         if let Some(ty_entry) = &ty_entry {
                             match ty_entry.tag() {
                                 gimli::DW_TAG_base_type => {
-                                    let name = if let Some(name) = ty_entry.attr(gimli::DW_AT_name).unwrap() {
+                                    let ty_name = if let Some(name) = ty_entry.attr(gimli::DW_AT_name).unwrap() {
                                         name.string_value(&dwarf.debug_str).unwrap().to_string().unwrap().into_owned()
                                     } else {
                                         "<unknown name>".to_string()
@@ -258,7 +257,7 @@ fn print_local(
                                     };
                                     let byte_size = ty_entry.attr(gimli::DW_AT_byte_size).unwrap().unwrap().udata_value().unwrap();
 
-                                    println!("{:indent$}base type {} = {} {}", "", name, encoding.static_string().unwrap(), byte_size, indent = indent);
+                                    println!("{:indent$}base type {} = {} {}", "", ty_name, encoding.static_string().unwrap(), byte_size, indent = indent);
 
                                     let bytes = match piece.location {
                                         Address { address } => {
@@ -301,7 +300,10 @@ fn print_local(
                 }
                 // FIXME use DW_AT_frame_base for register
                 gimli::EvaluationResult::RequiresFrameBase => res = eval.resume_with_frame_base(frame.regs[gimli::X86_64::RSP.0].unwrap()).unwrap(),
-                _ => break,
+                _ => {
+                    println!("{:indent$}eval: {:?}", "", res, indent = indent);
+                    break;
+                }
             }
         }
     }
