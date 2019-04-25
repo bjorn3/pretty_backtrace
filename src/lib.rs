@@ -13,6 +13,8 @@ use std::path::PathBuf;
 
 use findshlibs::{Avma, Svma, SharedLibrary, Segment};
 
+use locate_debuginfo::Context;
+
 lazy_static::lazy_static! {
     static ref HOOK: Box<for<'a> Fn(&'a PanicInfo) + Sync + Send + 'static> = {
         let prev = take_hook();

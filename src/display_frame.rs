@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use crate::{Address, FrameIndex};
 
-pub(crate) fn display_frame(context: &addr2line::Context, i: FrameIndex, addr: Address) {
-    let mut iter = context.find_frames(addr.svma.0 as u64).unwrap();
+pub(crate) fn display_frame(context: &crate::Context, i: FrameIndex, addr: Address) {
+    let mut iter = context.addr2line.find_frames(addr.svma.0 as u64).unwrap();
     let mut first_frame = true;
     while let Some(frame) = iter.next().unwrap() {
         let function_name = frame.function.map(|n|n.demangle().unwrap().to_string()).unwrap_or("<??>".to_string());

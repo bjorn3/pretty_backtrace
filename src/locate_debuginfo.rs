@@ -1,7 +1,14 @@
+use std::borrow::Cow;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
-use addr2line::Context;
+use object::Object;
+
+pub struct Context {
+    pub addr2line: addr2line::Context,
+    pub dwarf: gimli::read::Dwarf<gimli::EndianRcSlice<gimli::RunTimeEndian>>,
+}
 
 pub fn get_context() -> Context {
     let bin_file_name = std::env::current_exe().expect("current bin");
@@ -23,7 +30,48 @@ pub fn get_context_for_file(file_name: &Path) -> Context {
     };
 
     let debug_file = object::File::parse(&debug_file).expect("parse file");
-    addr2line::Context::new(&debug_file).expect("create context")
+    let addr2line = addr2line::Context::new(&debug_file).expect("create context");
+
+    let endian = if debug_file.is_little_endian() {
+        gimli::RunTimeEndian::Little
+    } else {
+        gimli::RunTimeEndian::Big
+    };
+
+    fn load_section<'data, 'file, O, S, Endian>(file: &'file O, endian: Endian) -> S
+    where
+        O: object::Object<'data, 'file>,
+        S: gimli::Section<gimli::EndianRcSlice<Endian>>,
+        Endian: gimli::Endianity,
+    {
+        let data = file.section_data_by_name(S::section_name()).unwrap_or(Cow::Borrowed(&[]));
+        S::from(gimli::EndianRcSlice::new(Rc::from(&*data), endian))
+    }
+
+    let dwarf = gimli::read::Dwarf {
+        debug_abbrev: load_section(&debug_file, endian),
+        debug_addr: load_section(&debug_file, endian),
+        debug_info: load_section(&debug_file, endian),
+        debug_line: load_section(&debug_file, endian),
+        debug_line_str: load_section(&debug_file, endian),
+        debug_str: load_section(&debug_file, endian),
+        debug_str_offsets: load_section(&debug_file, endian),
+        debug_str_sup: gimli::EndianRcSlice::new(Rc::new([]), endian).into(),
+        debug_types: load_section(&debug_file, endian),
+        locations: gimli::LocationLists::new(
+            load_section(&debug_file, endian),
+            load_section(&debug_file, endian),
+        ),
+        ranges: gimli::RangeLists::new(
+            load_section(&debug_file, endian),
+            load_section(&debug_file, endian),
+        ),
+    };
+
+    Context {
+        addr2line,
+        dwarf,
+    }
 }
 
 fn load_dsym(dsym_dir: PathBuf) -> Vec<u8> {
