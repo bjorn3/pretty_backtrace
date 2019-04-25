@@ -121,7 +121,6 @@ fn print_location(location: Option<addr2line::Location>, mut show_source: bool) 
 type Slice = gimli::EndianRcSlice<gimli::RunTimeEndian>;
 
 fn print_values(context: &crate::Context, frame: &Frame) {
-    use gimli::read::Reader;
     let unit = if let Some(unit) = find_unit_for_svma(&context.dwarf, frame.addr.svma) {
         unit
     } else {
@@ -137,83 +136,7 @@ fn print_values(context: &crate::Context, frame: &Frame) {
                 println!("{:indent$}{:?}", "", entry.tag().static_string(), indent = indent);
 
                 if entry.tag() == gimli::DW_TAG_formal_parameter || entry.tag() == gimli::DW_TAG_variable {
-                    let name = if let Some(name) = entry.attr(gimli::DW_AT_name).unwrap() {
-                        name.string_value(&dwarf.debug_str).unwrap().to_string().unwrap().into_owned()
-                    } else {
-                        "<unknown name>".to_string()
-                    };
-                    println!("{:indent$}name: {}", "", name, indent = indent);
-
-                    /*let ty = if let Some(ty) = entry.attr(gimli::DW_AT_type).unwrap() {
-                        match ty.value() {
-                            gimli::AttributeValue::DebugTypesRef(type_sig) => {} // TODO
-                            _ => panic!("{:?}", ty.value()),
-                        };
-                        ty.string_value(&dwarf.debug_str).unwrap().to_string().unwrap().into_owned()
-                    } else {
-                        "<unknown type>".to_string()
-                    };
-                    println!("{:indent$}type: {}", "", ty, indent = indent);*/
-
-                    let exprloc = if let Some(exprloc) = entry.attr(gimli::DW_AT_location).unwrap() {
-                        Some(match exprloc.value() {
-                            gimli::AttributeValue::Block(data) => gimli::Expression(data),
-                            gimli::AttributeValue::Exprloc(exprloc) => exprloc,
-                            gimli::AttributeValue::LocationListsRef(loclistref) => {
-                                //dwarf.locations(unit, loclistref);
-                                println!("warning: unhandled location list");
-                                return;
-                            },
-                            _ => panic!("{:?}", exprloc.value()),
-                        })
-                    } else {
-                        None
-                    };
-
-                    if let Some(exprloc) = exprloc {
-                        let mut eval = exprloc.clone().evaluation(unit.encoding());
-                        let mut res = eval.evaluate().unwrap();
-                        loop {
-                            println!("{:indent$}eval: {:?}", "", res, indent = indent);
-                            match res {
-                                gimli::EvaluationResult::Complete => {
-                                    let result = eval.result();
-                                    println!("{:indent$}eval res: {:?}", "", result, indent = indent);
-                                    for piece in result {
-                                        use gimli::read::Location::*;
-                                        match piece.location {
-                                            Empty => println!("{:indent$}piece: empty", "", indent = indent),
-                                            Register { register } => {
-                                                println!("{:indent$}piece: register={:?}", "", register, indent = indent);
-                                            }
-                                            Address { address } => {
-                                                println!("{:indent$}piece: address={:?}", "", address, indent = indent);
-                                            }
-                                            Value { value } => {
-                                                println!("{:indent$}piece: value={:?}", "", value, indent = indent);
-                                            }
-                                            Bytes { value } => {
-                                                println!("{:indent$}piece: bytes={:?}", "", value, indent = indent);
-                                            }
-                                            ImplicitPointer { value, byte_offset } => {
-                                                println!("{:indent$}piece: implicitptr={:?}+{:?}", "", value, byte_offset, indent = indent);
-                                            }
-                                        }
-                                    }
-                                    break;
-                                }
-                                // FIXME use DW_AT_frame_base for register
-                                gimli::EvaluationResult::RequiresFrameBase => res = eval.resume_with_frame_base(frame.regs[gimli::X86_64::RSP.0].unwrap()).unwrap(),
-                                _ => break,
-                            }
-                        }
-                    }
-
-                    let mut attrs = entry.attrs();
-                    while let Some(attr) = attrs.next().unwrap() {
-                        println!("{:indent$}attr {:?} = ???", "", attr.name().static_string(), indent = indent);
-                        //println!("Attribute value = {:?}", attr.value());
-                    }
+                    print_local(dwarf, unit, frame, indent, entry);
                 }
             }
             let mut children = node.children();
@@ -223,6 +146,94 @@ fn print_values(context: &crate::Context, frame: &Frame) {
             }
         }
     }).unwrap();
+}
+
+fn print_local(
+    dwarf: &gimli::Dwarf<Slice>,
+    unit: &gimli::Unit<Slice>,
+    frame: &Frame,
+    indent: usize,
+    entry: &gimli::DebuggingInformationEntry<Slice>,
+) {
+    use gimli::read::Reader;
+
+    let name = if let Some(name) = entry.attr(gimli::DW_AT_name).unwrap() {
+        name.string_value(&dwarf.debug_str).unwrap().to_string().unwrap().into_owned()
+    } else {
+        "<unknown name>".to_string()
+    };
+    println!("{:indent$}name: {}", "", name, indent = indent);
+
+    /*let ty = if let Some(ty) = entry.attr(gimli::DW_AT_type).unwrap() {
+        match ty.value() {
+            gimli::AttributeValue::DebugTypesRef(type_sig) => {} // TODO
+            _ => panic!("{:?}", ty.value()),
+        };
+        ty.string_value(&dwarf.debug_str).unwrap().to_string().unwrap().into_owned()
+    } else {
+        "<unknown type>".to_string()
+    };
+    println!("{:indent$}type: {}", "", ty, indent = indent);*/
+
+    let exprloc = if let Some(exprloc) = entry.attr(gimli::DW_AT_location).unwrap() {
+        Some(match exprloc.value() {
+            gimli::AttributeValue::Block(data) => gimli::Expression(data),
+            gimli::AttributeValue::Exprloc(exprloc) => exprloc,
+            gimli::AttributeValue::LocationListsRef(loclistref) => {
+                //dwarf.locations(unit, loclistref);
+                println!("warning: unhandled location list");
+                return;
+            },
+            _ => panic!("{:?}", exprloc.value()),
+        })
+    } else {
+        None
+    };
+
+    if let Some(exprloc) = exprloc {
+        let mut eval = exprloc.clone().evaluation(unit.encoding());
+        let mut res = eval.evaluate().unwrap();
+        loop {
+            println!("{:indent$}eval: {:?}", "", res, indent = indent);
+            match res {
+                gimli::EvaluationResult::Complete => {
+                    let result = eval.result();
+                    println!("{:indent$}eval res: {:?}", "", result, indent = indent);
+                    for piece in result {
+                        use gimli::read::Location::*;
+                        match piece.location {
+                            Empty => println!("{:indent$}piece: empty", "", indent = indent),
+                            Register { register } => {
+                                println!("{:indent$}piece: register={:?}", "", register, indent = indent);
+                            }
+                            Address { address } => {
+                                println!("{:indent$}piece: address={:?}", "", address, indent = indent);
+                            }
+                            Value { value } => {
+                                println!("{:indent$}piece: value={:?}", "", value, indent = indent);
+                            }
+                            Bytes { value } => {
+                                println!("{:indent$}piece: bytes={:?}", "", value, indent = indent);
+                            }
+                            ImplicitPointer { value, byte_offset } => {
+                                println!("{:indent$}piece: implicitptr={:?}+{:?}", "", value, byte_offset, indent = indent);
+                            }
+                        }
+                    }
+                    break;
+                }
+                // FIXME use DW_AT_frame_base for register
+                gimli::EvaluationResult::RequiresFrameBase => res = eval.resume_with_frame_base(frame.regs[gimli::X86_64::RSP.0].unwrap()).unwrap(),
+                _ => break,
+            }
+        }
+    }
+
+    let mut attrs = entry.attrs();
+    while let Some(attr) = attrs.next().unwrap() {
+        println!("{:indent$}attr {:?} = ???", "", attr.name().static_string(), indent = indent);
+        //println!("Attribute value = {:?}", attr.value());
+    }
 }
 
 fn find_unit_for_svma(dwarf: &gimli::Dwarf<Slice>, svma: findshlibs::Svma) -> Option<gimli::read::Unit<Slice>> {
