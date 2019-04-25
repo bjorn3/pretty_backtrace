@@ -12,8 +12,6 @@ pub fn print_backtrace() {
         let mut i = FrameIndex(0);
         while let Some(frame) = x.next().unwrap() {
             let ip = x.registers()[16].unwrap();
-            backtrace::resolve(ip as *mut std::os::raw::c_void, |sym| println!("{:?} ({:?}:{:?})", sym.name(), sym.filename(), sym.lineno()));
-            println!("{:?}", frame);
 
             let addr = if let Some(addr) = Address::from_avma(Avma(ip as *const u8)) {
                 addr

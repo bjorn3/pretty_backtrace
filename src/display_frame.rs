@@ -234,6 +234,7 @@ fn print_local(
         println!("{:indent$}attr {:?} = ???", "", attr.name().static_string(), indent = indent);
         //println!("Attribute value = {:?}", attr.value());
     }
+    println!();
 }
 
 fn find_unit_for_svma(dwarf: &gimli::Dwarf<Slice>, svma: findshlibs::Svma) -> Option<gimli::read::Unit<Slice>> {
