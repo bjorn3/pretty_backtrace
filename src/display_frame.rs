@@ -34,7 +34,7 @@ pub(crate) fn display_frame(context: &crate::Context, stack_frame: Frame) {
         });
     }
 
-    print_values(context, stack_frame.addr.svma);
+    print_values(context, &stack_frame);
 }
 
 fn write_frame_line(frame: &Frame, function_name: &str, err: bool) {
@@ -120,14 +120,14 @@ fn print_location(location: Option<addr2line::Location>, mut show_source: bool) 
 
 type Slice = gimli::EndianRcSlice<gimli::RunTimeEndian>;
 
-fn print_values(context: &crate::Context, svma: findshlibs::Svma) {
+fn print_values(context: &crate::Context, frame: &Frame) {
     use gimli::read::Reader;
-    let unit = if let Some(unit) = find_unit_for_svma(&context.dwarf, svma) {
+    let unit = if let Some(unit) = find_unit_for_svma(&context.dwarf, frame.addr.svma) {
         unit
     } else {
         return;
     };
-    find_die_for_svma(&context.dwarf, &unit, svma, |entry| {
+    find_die_for_svma(&context.dwarf, &unit, frame.addr.svma, |entry| {
         let mut entries_tree = unit.entries_tree(Some(entry.offset())).unwrap();
         process_tree(&context.dwarf, &unit, entries_tree.root().unwrap(), 0);
 
