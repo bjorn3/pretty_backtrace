@@ -23,3 +23,7 @@ syntect = "3.0.2"
 rental = "0.5.2"
 findshlibs = "0.4.0"
 libc = "0.2.51"
+
+#unwind = { git = "https://github.com/gimli-rs/unwind-rs.git" }
+unwind = { path = "../unwind-rs/unwind" }
+fallible-iterator = "0.1.0"

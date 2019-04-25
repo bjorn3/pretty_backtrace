@@ -88,6 +88,7 @@ impl fmt::Display for FrameIndex {
 struct Frame {
     index: FrameIndex,
     addr: Address,
+    regs: unwind::registers::Registers,
 }
 
 
