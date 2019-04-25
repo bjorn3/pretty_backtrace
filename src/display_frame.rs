@@ -129,9 +129,9 @@ fn print_values(context: &crate::Context, frame: &Frame) {
     };
     find_die_for_svma(&context.dwarf, &unit, frame.addr.svma, |entry| {
         let mut entries_tree = unit.entries_tree(Some(entry.offset())).unwrap();
-        process_tree(&context.dwarf, &unit, entries_tree.root().unwrap(), 0);
+        process_tree(&context.dwarf, &unit, frame, entries_tree.root().unwrap(), 0);
 
-        fn process_tree(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, mut node: gimli::EntriesTreeNode<Slice>, indent: usize) {
+        fn process_tree(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, frame: &Frame, mut node: gimli::EntriesTreeNode<Slice>, indent: usize) {
             {
                 let entry = node.entry();
                 println!("{:indent$}{:?}", "", entry.tag().static_string(), indent = indent);
@@ -143,6 +143,17 @@ fn print_values(context: &crate::Context, frame: &Frame) {
                         "<unknown name>".to_string()
                     };
                     println!("{:indent$}name: {}", "", name, indent = indent);
+
+                    /*let ty = if let Some(ty) = entry.attr(gimli::DW_AT_type).unwrap() {
+                        match ty.value() {
+                            gimli::AttributeValue::DebugTypesRef(type_sig) => {} // TODO
+                            _ => panic!("{:?}", ty.value()),
+                        };
+                        ty.string_value(&dwarf.debug_str).unwrap().to_string().unwrap().into_owned()
+                    } else {
+                        "<unknown type>".to_string()
+                    };
+                    println!("{:indent$}type: {}", "", ty, indent = indent);*/
 
                     let exprloc = if let Some(exprloc) = entry.attr(gimli::DW_AT_location).unwrap() {
                         Some(match exprloc.value() {
@@ -165,6 +176,34 @@ fn print_values(context: &crate::Context, frame: &Frame) {
                         loop {
                             println!("{:indent$}eval: {:?}", "", res, indent = indent);
                             match res {
+                                gimli::EvaluationResult::Complete => {
+                                    let result = eval.result();
+                                    println!("{:indent$}eval res: {:?}", "", result, indent = indent);
+                                    for piece in result {
+                                        use gimli::read::Location::*;
+                                        match piece.location {
+                                            Empty => println!("{:indent$}piece: empty", "", indent = indent),
+                                            Register { register } => {
+                                                println!("{:indent$}piece: register={:?}", "", register, indent = indent);
+                                            }
+                                            Address { address } => {
+                                                println!("{:indent$}piece: address={:?}", "", address, indent = indent);
+                                            }
+                                            Value { value } => {
+                                                println!("{:indent$}piece: value={:?}", "", value, indent = indent);
+                                            }
+                                            Bytes { value } => {
+                                                println!("{:indent$}piece: bytes={:?}", "", value, indent = indent);
+                                            }
+                                            ImplicitPointer { value, byte_offset } => {
+                                                println!("{:indent$}piece: implicitptr={:?}+{:?}", "", value, byte_offset, indent = indent);
+                                            }
+                                        }
+                                    }
+                                    break;
+                                }
+                                // FIXME use DW_AT_frame_base for register
+                                gimli::EvaluationResult::RequiresFrameBase => res = eval.resume_with_frame_base(frame.regs[gimli::X86_64::RSP.0].unwrap()).unwrap(),
                                 _ => break,
                             }
                         }
@@ -180,7 +219,7 @@ fn print_values(context: &crate::Context, frame: &Frame) {
             let mut children = node.children();
             while let Some(child) = children.next().unwrap() {
                 // Recursively process a child.
-                process_tree(dwarf, unit, child, indent + 4);
+                process_tree(dwarf, unit, frame, child, indent + 4);
             }
         }
     }).unwrap();
