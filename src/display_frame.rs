@@ -1,15 +1,15 @@
 use std::path::PathBuf;
 
-use crate::{Address, FrameIndex};
+use crate::Frame;
 
-pub(crate) fn display_frame(context: &crate::Context, i: FrameIndex, addr: Address) {
-    let mut iter = context.addr2line.find_frames(addr.svma.0 as u64).unwrap();
+pub(crate) fn display_frame(context: &crate::Context, stack_frame: Frame) {
+    let mut iter = context.addr2line.find_frames(stack_frame.addr.svma.0 as u64).unwrap();
     let mut first_frame = true;
     while let Some(frame) = iter.next().unwrap() {
         let function_name = frame.function.map(|n|n.demangle().unwrap().to_string()).unwrap_or("<??>".to_string());
 
         if first_frame {
-            write_frame_line(i, &function_name, &addr, false);
+            write_frame_line(&stack_frame, &function_name, false);
         } else {
             eprintln!("      {}", function_name);
         }
@@ -23,33 +23,27 @@ pub(crate) fn display_frame(context: &crate::Context, i: FrameIndex, addr: Addre
 
     if first_frame == true {
         // No debug info
-        backtrace::resolve(addr.avma.0 as *mut _, |symbol| {
+        backtrace::resolve(stack_frame.addr.avma.0 as *mut _, |symbol| {
             if let Some(symbol_name) = symbol.name() {
                 let mangled_name = symbol_name.as_str().unwrap();
                 let name = addr2line::demangle_auto(mangled_name.into(), None);
-                write_frame_line(i, &name, &addr, false);
+                write_frame_line(&stack_frame, &name, false);
             } else {
-                write_frame_line(i, "<unknown function name>", &addr, true);
+                write_frame_line(&stack_frame, "<unknown function name>", true);
             }
         });
     }
 
-    print_values(context, addr.svma);
-
-    // Wait a second each 100 frames to prevent filling the screen in case of a stackoverflow
-    if i.0 % 100 == 99 {
-        eprintln!("Backtrace is very big, sleeping 1s...");
-        ::std::thread::sleep_ms(1000);
-    }
+    print_values(context, &stack_frame);
 }
 
-fn write_frame_line(i: FrameIndex, function_name: &str, addr: &Address, err: bool) {
+fn write_frame_line(frame: &Frame, function_name: &str, err: bool) {
     eprintln!(
         "{} {}{:<80}\x1b[0m  \x1b[2m({})\x1b[0m",
-        i,
+        frame.index,
         if err { "\x1b[91m" } else { "" },
         function_name,
-        addr,
+        frame.addr,
     );
 }
 
@@ -126,14 +120,14 @@ fn print_location(location: Option<addr2line::Location>, mut show_source: bool) 
 
 type Slice = gimli::EndianRcSlice<gimli::RunTimeEndian>;
 
-fn print_values(context: &crate::Context, svma: findshlibs::Svma) {
+fn print_values(context: &crate::Context, frame: &Frame) {
     use gimli::read::Reader;
-    let unit = if let Some(unit) = find_unit_for_svma(&context.dwarf, svma) {
+    let unit = if let Some(unit) = find_unit_for_svma(&context.dwarf, frame.addr.svma) {
         unit
     } else {
         return;
     };
-    find_die_for_svma(&context.dwarf, &unit, svma, |entry| {
+    find_die_for_svma(&context.dwarf, &unit, frame.addr.svma, |entry| {
         let mut entries_tree = unit.entries_tree(Some(entry.offset())).unwrap();
         process_tree(&context.dwarf, &unit, entries_tree.root().unwrap(), 0);
 

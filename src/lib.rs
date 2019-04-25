@@ -85,6 +85,12 @@ impl fmt::Display for FrameIndex {
     }
 }
 
+struct Frame {
+    index: FrameIndex,
+    addr: Address,
+}
+
+
 #[derive(Clone)]
 struct Address {
     avma: Avma,
