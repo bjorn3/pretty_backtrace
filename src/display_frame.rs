@@ -151,7 +151,7 @@ fn print_values(context: &crate::Context, svma: findshlibs::Svma) {
                     println!("{:indent$}name: {}", "", name, indent = indent);
 
                     let exprloc = if let Some(exprloc) = entry.attr(gimli::DW_AT_location).unwrap() {
-                        let exprloc = match exprloc.value() {
+                        Some(match exprloc.value() {
                             gimli::AttributeValue::Block(data) => gimli::Expression(data),
                             gimli::AttributeValue::Exprloc(exprloc) => exprloc,
                             gimli::AttributeValue::LocationListsRef(loclistref) => {
@@ -160,13 +160,21 @@ fn print_values(context: &crate::Context, svma: findshlibs::Svma) {
                                 return;
                             },
                             _ => panic!("{:?}", exprloc.value()),
-                        };
-                        let mut eval = exprloc.clone().evaluation(unit.encoding());
-                        println!("{:indent$}exprloc: {:?}", "", eval.evaluate().unwrap(), indent = indent);
-                        Some(exprloc)
+                        })
                     } else {
                         None
                     };
+
+                    if let Some(exprloc) = exprloc {
+                        let mut eval = exprloc.clone().evaluation(unit.encoding());
+                        let mut res = eval.evaluate().unwrap();
+                        loop {
+                            println!("{:indent$}eval: {:?}", "", res, indent = indent);
+                            match res {
+                                _ => break,
+                            }
+                        }
+                    }
 
                     let mut attrs = entry.attrs();
                     while let Some(attr) = attrs.next().unwrap() {
