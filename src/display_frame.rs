@@ -233,13 +233,25 @@ fn pretty_print_value(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, ty
             Some(format!("{:0ptrsize$p}", read_to_u64(bytes) as *const u8, ptrsize = bytes.len()))
         }
         _ => {
-            println!("{:indent$}tag: {}", "", ty_entry.tag().static_string().unwrap(), indent = indent + 4);
-            println!("{:indent$}name: {}", "", entry_name(dwarf, &ty_entry), indent = indent + 4);
+            fn process_tree<'dwarf, 'unit: 'dwarf>(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, node: gimli::EntriesTreeNode<'dwarf, 'unit, '_, Slice>, indent: usize) {
+                println!("{:indent$}tag: {}", "", node.entry().tag().static_string().unwrap(), indent = indent);
+                println!("{:indent$}name: {}", "", entry_name(dwarf, node.entry()), indent = indent + 4);
 
-            let mut attrs = ty_entry.attrs();
-            while let Some(attr) = attrs.next().unwrap() {
-                println!("{:indent$}attr {:?} = {:?}", "", attr.name().static_string(), attr.value(), indent = indent + 4);
+                let mut attrs = node.entry().attrs();
+                while let Some(attr) = attrs.next().unwrap() {
+                    println!("{:indent$}attr {:?} = {:?}", "", attr.name().static_string(), attr.value(), indent = indent + 4);
+                }
+
+                let mut children = node.children();
+                while let Some(child) = children.next().unwrap() {
+                    // Recursively process a child.
+                    process_tree(dwarf, unit, child, indent + 2);
+                }
             }
+
+            let mut entries_tree = unit.entries_tree(Some(ty_entry.offset())).unwrap();
+            process_tree(&dwarf, &unit, entries_tree.root().unwrap(), indent + 4);
+
             None
         }
     }
