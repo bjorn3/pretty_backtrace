@@ -164,15 +164,8 @@ fn print_local(
         //println!("Attribute value = {:?}", attr.value());
     }
 
-    let ty_entry = if let Some(ty) = entry.attr(gimli::DW_AT_type).unwrap() {
-        let ty_offset = match ty.value() {
-            gimli::AttributeValue::UnitRef(unit_offset) => unit_offset,
-            _ => panic!("{:?}", ty.value()),
-        };
-
-        let mut entries = unit.entries_at_offset(ty_offset).expect("entry");
-        entries.next_entry().unwrap().unwrap();
-        entries.current().expect("current").clone()
+    let ty_entry = if let Some(ty_entry) = entry_type_entry(unit, entry) {
+        ty_entry
     } else {
         println!("warning: missing type for local {}", local_name);
         return;
@@ -300,6 +293,21 @@ fn entry_name(dwarf: &gimli::Dwarf<Slice>, entry: &gimli::DebuggingInformationEn
         name.string_value(&dwarf.debug_str).unwrap().to_string().unwrap().into_owned()
     } else {
         "<unknown name>".to_string()
+    }
+}
+
+fn entry_type_entry<'dwarf, 'unit: 'dwarf>(unit: &'unit gimli::Unit<'dwarf, Slice>, entry: &gimli::DebuggingInformationEntry<Slice>) -> Option<gimli::DebuggingInformationEntry<'dwarf, 'unit, Slice>> {
+    if let Some(ty) = entry.attr(gimli::DW_AT_type).unwrap() {
+        let ty_offset = match ty.value() {
+            gimli::AttributeValue::UnitRef(unit_offset) => unit_offset,
+            _ => panic!("{:?}", ty.value()),
+        };
+
+        let mut entries = unit.entries_at_offset(ty_offset).expect("entry");
+        entries.next_entry().unwrap().unwrap();
+        Some(entries.current().expect("current").clone())
+    } else {
+        None
     }
 }
 
