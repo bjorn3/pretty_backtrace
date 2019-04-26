@@ -173,13 +173,7 @@ fn print_local(
         return;
     };
 
-    let byte_size = ty_entry.attr(gimli::DW_AT_byte_size).unwrap().map(|val| val.udata_value().unwrap() as usize).unwrap_or_else(|| {
-        if ty_entry.tag() == gimli::DW_TAG_pointer_type {
-            std::mem::size_of::<usize>()
-        } else {
-            panic!("type die with tag {:?} doesn't have DW_AT_byte_size", ty_entry.tag().static_string());
-        }
-    });
+    let byte_size = type_byte_size(&ty_entry);
 
     let exprloc = if let Some(exprloc) = entry.attr(gimli::DW_AT_location).unwrap() {
         match exprloc.value() {
@@ -199,8 +193,7 @@ fn print_local(
     match binary_data_for_expression(frame, unit, exprloc, byte_size, indent) {
         Ok(ref bytes) => { // use ref here to prevent accidential mutation
             let ty_name = entry_name(dwarf, &ty_entry);
-            let val = pretty_print_value(dwarf, unit, &ty_entry, bytes, indent)
-                .unwrap_or_else(|| "<unknown>".to_string());
+            let val = pretty_print_value(dwarf, unit, &ty_entry, bytes, indent);
             println!("{:<88}raw: {:?}", format!("{}: {} = {}", local_name, ty_name, val), bytes);
         }
         Err(res) => {
@@ -212,7 +205,7 @@ fn print_local(
     println!();
 }
 
-fn pretty_print_value(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, ty_entry: &gimli::DebuggingInformationEntry<Slice>, bytes: &[u8], indent: usize) -> Option<String> {
+fn pretty_print_value(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, ty_entry: &gimli::DebuggingInformationEntry<Slice>, bytes: &[u8], indent: usize) -> String {
     match ty_entry.tag() {
         gimli::DW_TAG_base_type => {
             let encoding = match ty_entry.attr(gimli::DW_AT_encoding).unwrap().unwrap().value() {
@@ -220,41 +213,102 @@ fn pretty_print_value(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, ty
                 val => panic!("{:?}", val),
             };
 
-            Some(match encoding {
+            match encoding {
                 gimli::DW_ATE_signed => format!("{}", read_to_i64(bytes)),
                 gimli::DW_ATE_unsigned => format!("{}", read_to_u64(bytes)),
                 _ => {
                     println!("warning: unknown base type encoding {:?}", encoding.static_string());
-                    return None;
-                }
-            })
-        }
-        gimli::DW_TAG_pointer_type => {
-            Some(format!("{:0ptrsize$p}", read_to_u64(bytes) as *const u8, ptrsize = bytes.len()))
-        }
-        _ => {
-            fn process_tree<'dwarf, 'unit: 'dwarf>(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, node: gimli::EntriesTreeNode<'dwarf, 'unit, '_, Slice>, indent: usize) {
-                println!("{:indent$}tag: {}", "", node.entry().tag().static_string().unwrap(), indent = indent);
-                println!("{:indent$}name: {}", "", entry_name(dwarf, node.entry()), indent = indent + 4);
-
-                let mut attrs = node.entry().attrs();
-                while let Some(attr) = attrs.next().unwrap() {
-                    println!("{:indent$}attr {:?} = {:?}", "", attr.name().static_string(), attr.value(), indent = indent + 4);
-                }
-
-                let mut children = node.children();
-                while let Some(child) = children.next().unwrap() {
-                    // Recursively process a child.
-                    process_tree(dwarf, unit, child, indent + 2);
+                    "<unknown>".to_string()
                 }
             }
+        }
+        gimli::DW_TAG_pointer_type => {
+            format!("{:0ptrsize$p}", read_to_u64(bytes) as *const u8, ptrsize = bytes.len())
+        }
+        gimli::DW_TAG_structure_type => {
+            /*
+            tag: DW_TAG_structure_type
+                  name: &str
+                  attr Some("DW_AT_name") = DebugStrRef(DebugStrOffset(7099996))
+                  attr Some("DW_AT_byte_size") = Udata(16)
+                  attr Some("DW_AT_alignment") = Udata(8)
+                tag: DW_TAG_member
+                  name: data_ptr
+                  attr Some("DW_AT_name") = DebugStrRef(DebugStrOffset(1219))
+                  attr Some("DW_AT_type") = UnitRef(UnitOffset(750))
+                  attr Some("DW_AT_alignment") = Udata(8)
+                  attr Some("DW_AT_data_member_location") = Udata(0)
+                tag: DW_TAG_member
+                  name: length
+                  attr Some("DW_AT_name") = DebugStrRef(DebugStrOffset(7335471))
+                  attr Some("DW_AT_type") = UnitRef(UnitOffset(766))
+                  attr Some("DW_AT_alignment") = Udata(8)
+                  attr Some("DW_AT_data_member_location") = Udata(8)
+            */
 
             let mut entries_tree = unit.entries_tree(Some(ty_entry.offset())).unwrap();
-            process_tree(&dwarf, &unit, entries_tree.root().unwrap(), indent + 4);
+            let mut children = entries_tree.root().unwrap().children();
 
-            None
+            let mut fmt = format!("{} {{\n", entry_name(dwarf, ty_entry));
+
+            while let Some(child) = children.next().unwrap() {
+                match child.entry().tag() {
+                    gimli::DW_TAG_member => {}
+                    gimli::DW_TAG_template_type_parameter => continue,
+                    tag => panic!("{:?}", tag.static_string()),
+                }
+                let child_name = entry_name(dwarf, child.entry());
+                let child_type = entry_type_entry(unit, child.entry()).unwrap();
+                let child_size = type_byte_size(&child_type);
+
+                print_attrs_and_childs(dwarf, unit, child.entry(), indent + 4);
+
+                let child_offset = child
+                    .entry()
+                    .attr_value(gimli::DW_AT_data_member_location)
+                    .expect("malformed dwarf")
+                    .expect("missing data member location")
+                    .udata_value()
+                    .expect("not udata") as usize;
+
+                let child_bytes = &bytes[child_offset .. child_offset + child_size];
+
+                let pretty_val = pretty_print_value(dwarf, unit, &child_type, child_bytes, indent + 4);
+
+                fmt.push_str(&format!("    {}: {},\n", child_name, pretty_val.replace('\n', "\n    ")));
+            }
+
+            fmt.push('}');
+
+            fmt
+        }
+        _ => {
+            print_attrs_and_childs(dwarf, unit, ty_entry, indent + 4);
+
+            "<unknown>".to_string()
         }
     }
+}
+
+fn print_attrs_and_childs(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, entry: &gimli::DebuggingInformationEntry<Slice>, indent: usize) {
+    fn process_tree(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, node: gimli::EntriesTreeNode<Slice>, indent: usize) {
+        println!("{:indent$}tag: {}", "", node.entry().tag().static_string().unwrap(), indent = indent);
+        println!("{:indent$}name: {}", "", entry_name(dwarf, node.entry()), indent = indent + 4);
+
+        let mut attrs = node.entry().attrs();
+        while let Some(attr) = attrs.next().unwrap() {
+            println!("{:indent$}attr {:?} = {:?}", "", attr.name().static_string(), attr.value(), indent = indent + 4);
+        }
+
+        let mut children = node.children();
+        while let Some(child) = children.next().unwrap() {
+            // Recursively process a child.
+            process_tree(dwarf, unit, child, indent + 2);
+        }
+    }
+
+    let mut entries_tree = unit.entries_tree(Some(entry.offset())).unwrap();
+    process_tree(&dwarf, &unit, entries_tree.root().unwrap(), indent);
 }
 
 fn read_to_u64(bytes: &[u8]) -> u64 {
@@ -304,6 +358,16 @@ fn entry_type_entry<'dwarf, 'unit: 'dwarf>(unit: &'unit gimli::Unit<Slice>, entr
     } else {
         None
     }
+}
+
+fn type_byte_size(ty_entry: &gimli::DebuggingInformationEntry<Slice>) -> usize {
+    ty_entry.attr(gimli::DW_AT_byte_size).unwrap().map(|val| val.udata_value().unwrap() as usize).unwrap_or_else(|| {
+        if ty_entry.tag() == gimli::DW_TAG_pointer_type {
+            std::mem::size_of::<usize>()
+        } else {
+            panic!("type die with tag {:?} doesn't have DW_AT_byte_size", ty_entry.tag().static_string());
+        }
+    })
 }
 
 fn evaluate_expression(
