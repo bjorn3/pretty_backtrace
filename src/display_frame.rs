@@ -249,45 +249,105 @@ fn pretty_print_value(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, ty
             let mut entries_tree = unit.entries_tree(Some(ty_entry.offset())).unwrap();
             let mut children = entries_tree.root().unwrap().children();
 
-            let mut fmt = format!("{} {{\n", entry_name(dwarf, ty_entry));
+            let mut variant_part = None;
+            while let Some(child) = children.next().unwrap() {
+                if child.entry().tag() == gimli::DW_TAG_variant_part {
+                    variant_part = Some(child.entry().clone());
+                }
+            }
+
+            let (mut fmt, offset) = if let Some(variant_part) = variant_part {
+                print_attrs_and_childs(dwarf, unit, ty_entry, indent + 4);
+
+                if let Some(discr) = variant_part.attr_value(gimli::DW_AT_discr).unwrap() {
+                    let discr_offset = match discr {
+                        gimli::AttributeValue::UnitRef(unit_offset) => unit_offset,
+                        _ => panic!("{:?}", discr),
+                    };
+
+                    let mut entries = unit.entries_at_offset(discr_offset).expect("entry");
+                    entries.next_entry().unwrap().unwrap();
+                    let discr = entries.current().expect("current").clone();
+                } else {
+
+                }
+
+                panic!();
+            } else {
+                (format!("{} {{\n", entry_name(dwarf, ty_entry)), ty_entry.offset())
+            };
+
+            let mut entries_tree = unit.entries_tree(Some(ty_entry.offset())).unwrap();
+            let mut children = entries_tree.root().unwrap().children();
 
             while let Some(child) = children.next().unwrap() {
-                match child.entry().tag() {
-                    gimli::DW_TAG_member => {}
-                    gimli::DW_TAG_template_type_parameter => continue,
-                    tag => panic!("{:?}", tag.static_string()),
+                if let Some(pretty) = pretty_print_data_member(dwarf, unit, child.entry(), bytes, indent) {
+                    fmt.push_str(&pretty);
                 }
-                let child_name = entry_name(dwarf, child.entry());
-                let child_type = entry_type_entry(unit, child.entry()).unwrap();
-                let child_size = type_byte_size(&child_type);
-
-                print_attrs_and_childs(dwarf, unit, child.entry(), indent + 4);
-
-                let child_offset = child
-                    .entry()
-                    .attr_value(gimli::DW_AT_data_member_location)
-                    .expect("malformed dwarf")
-                    .expect("missing data member location")
-                    .udata_value()
-                    .expect("not udata") as usize;
-
-                let child_bytes = &bytes[child_offset .. child_offset + child_size];
-
-                let pretty_val = pretty_print_value(dwarf, unit, &child_type, child_bytes, indent + 4);
-
-                fmt.push_str(&format!("    {}: {},\n", child_name, pretty_val.replace('\n', "\n    ")));
             }
 
             fmt.push('}');
 
             fmt
         }
+        gimli::DW_TAG_enumeration_type => {
+            /*
+            tag: DW_TAG_enumeration_type
+                name: RunTimeEndian
+                attr Some("DW_AT_type") = UnitRef(UnitOffset(3569))
+                attr Some("DW_AT_enum_class") = Flag(true)
+                attr Some("DW_AT_name") = DebugStrRef(DebugStrOffset(808805))
+                attr Some("DW_AT_byte_size") = Udata(1)
+                attr Some("DW_AT_alignment") = Udata(1)
+              tag: DW_TAG_enumerator
+                  name: Little
+                  attr Some("DW_AT_name") = DebugStrRef(DebugStrOffset(6618))
+                  attr Some("DW_AT_const_value") = Udata(0)
+              tag: DW_TAG_enumerator
+                  name: Big
+                  attr Some("DW_AT_name") = DebugStrRef(DebugStrOffset(29054))
+                  attr Some("DW_AT_const_value") = Udata(1)
+            */
+            print_attrs_and_childs(dwarf, unit, ty_entry, indent + 4);
+
+            "<enum>".to_string()
+        }
         _ => {
             print_attrs_and_childs(dwarf, unit, ty_entry, indent + 4);
+            println!();
 
             "<unknown>".to_string()
         }
     }
+}
+
+fn pretty_print_data_member(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, member: &gimli::DebuggingInformationEntry<Slice>, bytes: &[u8], indent: usize) -> Option<String> {
+    match member.tag() {
+        gimli::DW_TAG_member => {}
+        gimli::DW_TAG_template_type_parameter => return None,
+        tag => {
+            print_attrs_and_childs(dwarf, unit, member, indent + 4);
+            panic!("{:?}", tag.static_string())
+        }
+    }
+    let child_name = entry_name(dwarf, member);
+    let child_type = entry_type_entry(unit, member).unwrap();
+    let child_size = type_byte_size(&child_type);
+
+    //print_attrs_and_childs(dwarf, unit, child.entry(), indent + 4);
+
+    let child_offset = member
+        .attr_value(gimli::DW_AT_data_member_location)
+        .expect("malformed dwarf")
+        .expect("missing data member location")
+        .udata_value()
+        .expect("not udata") as usize;
+
+    let child_bytes = &bytes[child_offset .. child_offset + child_size];
+
+    let pretty_val = pretty_print_value(dwarf, unit, &child_type, child_bytes, indent + 4);
+
+    Some(format!("    {}: {},\n", child_name, pretty_val.replace('\n', "\n    ")))
 }
 
 fn print_attrs_and_childs(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, entry: &gimli::DebuggingInformationEntry<Slice>, indent: usize) {

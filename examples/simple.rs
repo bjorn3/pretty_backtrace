@@ -1,8 +1,13 @@
 fn main() {
     pretty_backtrace::setup();
-    please_panic(42);
+    please_panic(Enum::Num(42));
 }
 
-fn please_panic(num: u64) {
+fn please_panic(_num: Enum) {
     panic!("Some message");
+}
+
+enum Enum {
+    Num(u64),
+    /**/Val,
 }
