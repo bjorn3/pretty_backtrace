@@ -194,41 +194,8 @@ fn print_local(
         return;
     };
 
-    let eval = exprloc.clone().evaluation(unit.encoding());
-    match evaluate_expression(frame, eval) {
-        Ok(result) => {
-            assert!(result.len() == 1, "eval result: {:?}", result);
-            let piece = result.into_iter().next().unwrap();
-            use gimli::read::Location::*;
-
-            assert!(piece.size_in_bits.is_none());
-            assert!(piece.bit_offset.is_none());
-
-            let bytes: &[u8] = match piece.location {
-                Empty => {
-                    println!("{:indent$}piece: empty", "", indent = indent);
-                    &[]
-                }
-                Register { register } => {
-                    panic!("{:indent$}piece: register={:?}", "", register, indent = indent);
-                }
-                Address { address } => {
-                    println!("{:indent$}piece: address={:016p}", "", address as *const u8, indent = indent);
-                    unsafe { std::slice::from_raw_parts(address as *const u8, byte_size as usize) }
-                }
-                Value { value } => {
-                    panic!("{:indent$}piece: value={:?}", "", value, indent = indent);
-                }
-                Bytes { value } => {
-                    panic!("{:indent$}piece: bytes={:?}", "", value, indent = indent);
-                }
-                ImplicitPointer { value, byte_offset } => {
-                    panic!("{:indent$}piece: implicitptr={:?}+{:?}", "", value, byte_offset, indent = indent);
-                }
-            };
-
-            println!("{:indent$}raw: {:?}", "", bytes, indent = indent);
-
+    match binary_data_for_expression(frame, dwarf, unit, exprloc, byte_size, indent) {
+        Ok(ref bytes) => { // use ref here to prevent accidential mutation
             match ty_entry.tag() {
                 gimli::DW_TAG_base_type => {
                     let ty_name = entry_name(dwarf, &ty_entry);
@@ -296,7 +263,7 @@ fn entry_name(dwarf: &gimli::Dwarf<Slice>, entry: &gimli::DebuggingInformationEn
     }
 }
 
-fn entry_type_entry<'dwarf, 'unit: 'dwarf>(unit: &'unit gimli::Unit<'dwarf, Slice>, entry: &gimli::DebuggingInformationEntry<Slice>) -> Option<gimli::DebuggingInformationEntry<'dwarf, 'unit, Slice>> {
+fn entry_type_entry<'dwarf, 'unit: 'dwarf>(unit: &'unit gimli::Unit<Slice>, entry: &gimli::DebuggingInformationEntry<Slice>) -> Option<gimli::DebuggingInformationEntry<'dwarf, 'unit, Slice>> {
     if let Some(ty) = entry.attr(gimli::DW_AT_type).unwrap() {
         let ty_offset = match ty.value() {
             gimli::AttributeValue::UnitRef(unit_offset) => unit_offset,
@@ -328,6 +295,51 @@ fn evaluate_expression(
             }
         }
     }
+}
+
+fn binary_data_for_expression(
+    frame: &Frame,
+    dwarf: &gimli::Dwarf<Slice>,
+    unit: &gimli::Unit<Slice>,
+    exprloc: gimli::Expression<Slice>,
+    byte_size: usize,
+    indent: usize,
+) -> Result<Vec<u8>, gimli::EvaluationResult<Slice>> {
+    let eval = exprloc.clone().evaluation(unit.encoding());
+    evaluate_expression(frame, eval).map(|result| {
+        assert!(result.len() == 1, "eval result: {:?}", result);
+        let piece = result.into_iter().next().unwrap();
+        use gimli::read::Location::*;
+
+        assert!(piece.size_in_bits.is_none(), "{:?}", piece);
+        assert!(piece.bit_offset.is_none(), "{:?}", piece);
+
+        let bytes: Vec<u8> = match piece.location {
+            Empty => {
+                println!("{:indent$}piece: empty", "", indent = indent);
+                Vec::new()
+            }
+            Register { register } => {
+                panic!("{:indent$}piece: register={:?}", "", register, indent = indent);
+            }
+            Address { address } => {
+                println!("{:indent$}piece: address={:016p}", "", address as *const u8, indent = indent);
+                unsafe { std::slice::from_raw_parts(address as *const u8, byte_size as usize) }.to_vec()
+            }
+            Value { value } => {
+                panic!("{:indent$}piece: value={:?}", "", value, indent = indent);
+            }
+            Bytes { value } => {
+                panic!("{:indent$}piece: bytes={:?}", "", value, indent = indent);
+            }
+            ImplicitPointer { value, byte_offset } => {
+                panic!("{:indent$}piece: implicitptr={:?}+{:?}", "", value, byte_offset, indent = indent);
+            }
+        };
+
+        println!("{:indent$}raw: {:?}", "", bytes, indent = indent);
+        bytes
+    })
 }
 
 fn find_unit_for_svma(dwarf: &gimli::Dwarf<Slice>, svma: findshlibs::Svma) -> Option<gimli::read::Unit<Slice>> {
