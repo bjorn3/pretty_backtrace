@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use gimli::Endianity;
+
 use crate::Frame;
 
 pub(crate) fn display_frame(context: &crate::Context, stack_frame: Frame) {
@@ -194,55 +196,12 @@ fn print_local(
         return;
     };
 
-    match binary_data_for_expression(frame, dwarf, unit, exprloc, byte_size, indent) {
+    match binary_data_for_expression(frame, unit, exprloc, byte_size, indent) {
         Ok(ref bytes) => { // use ref here to prevent accidential mutation
-            match ty_entry.tag() {
-                gimli::DW_TAG_base_type => {
-                    let ty_name = entry_name(dwarf, &ty_entry);
-                    let encoding = match ty_entry.attr(gimli::DW_AT_encoding).unwrap().unwrap().value() {
-                        gimli::AttributeValue::Encoding(encoding) => encoding,
-                        val => panic!("{:?}", val),
-                    };
-
-                    use gimli::Endianity;
-
-                    let val = match encoding {
-                        gimli::DW_ATE_signed => format!("{}", match bytes.len() {
-                            1 => bytes[0] as i8 as i64,
-                            2 => gimli::NativeEndian::default().read_i16(bytes) as i64,
-                            4 => gimli::NativeEndian::default().read_i32(bytes) as i64,
-                            8 => gimli::NativeEndian::default().read_i64(bytes) as i64,
-                            _ => {
-                                panic!();
-                            }
-                        }),
-                        gimli::DW_ATE_unsigned => format!("{}", match bytes.len() {
-                            1 => bytes[0] as u64,
-                            2 => gimli::NativeEndian::default().read_u16(bytes) as u64,
-                            4 => gimli::NativeEndian::default().read_u32(bytes) as u64,
-                            8 => gimli::NativeEndian::default().read_u64(bytes) as u64,
-                            _ => {
-                                panic!();
-                            }
-                        }),
-                        _ => {
-                            println!("warning: unknown base type encoding {:?}", encoding.static_string());
-                            return;
-                        }
-                    };
-
-                    println!("{}: {} = {}", local_name, ty_name, val);
-                }
-                _ => {
-                    println!("{:indent$}tag: {}", "", ty_entry.tag().static_string().unwrap(), indent = indent + 4);
-                    println!("{:indent$}name: {}", "", entry_name(dwarf, &ty_entry), indent = indent + 4);
-
-                    let mut attrs = ty_entry.attrs();
-                    while let Some(attr) = attrs.next().unwrap() {
-                        println!("{:indent$}attr {:?} = {:?}", "", attr.name().static_string(), attr.value(), indent = indent + 4);
-                    }
-                }
-            }
+            let ty_name = entry_name(dwarf, &ty_entry);
+            let val = pretty_print_value(dwarf, unit, &ty_entry, bytes, indent)
+                .unwrap_or_else(|| "<unknown>".to_string());
+            println!("{:<88}raw: {:?}", format!("{}: {} = {}", local_name, ty_name, val), bytes);
         }
         Err(res) => {
             println!("{:indent$}eval for {}: {:?}", "", local_name, res, indent = indent);
@@ -251,6 +210,60 @@ fn print_local(
     }
 
     println!();
+}
+
+fn pretty_print_value(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, ty_entry: &gimli::DebuggingInformationEntry<Slice>, bytes: &[u8], indent: usize) -> Option<String> {
+    match ty_entry.tag() {
+        gimli::DW_TAG_base_type => {
+            let encoding = match ty_entry.attr(gimli::DW_AT_encoding).unwrap().unwrap().value() {
+                gimli::AttributeValue::Encoding(encoding) => encoding,
+                val => panic!("{:?}", val),
+            };
+
+            Some(match encoding {
+                gimli::DW_ATE_signed => format!("{}", read_to_i64(bytes)),
+                gimli::DW_ATE_unsigned => format!("{}", read_to_u64(bytes)),
+                _ => {
+                    println!("warning: unknown base type encoding {:?}", encoding.static_string());
+                    return None;
+                }
+            })
+        }
+        _ => {
+            println!("{:indent$}tag: {}", "", ty_entry.tag().static_string().unwrap(), indent = indent + 4);
+            println!("{:indent$}name: {}", "", entry_name(dwarf, &ty_entry), indent = indent + 4);
+
+            let mut attrs = ty_entry.attrs();
+            while let Some(attr) = attrs.next().unwrap() {
+                println!("{:indent$}attr {:?} = {:?}", "", attr.name().static_string(), attr.value(), indent = indent + 4);
+            }
+            None
+        }
+    }
+}
+
+fn read_to_u64(bytes: &[u8]) -> u64 {
+    match bytes.len() {
+        1 => bytes[0] as u64,
+        2 => gimli::NativeEndian::default().read_u16(bytes) as u64,
+        4 => gimli::NativeEndian::default().read_u32(bytes) as u64,
+        8 => gimli::NativeEndian::default().read_u64(bytes) as u64,
+        _ => {
+            panic!("{:?}", bytes);
+        }
+    }
+}
+
+fn read_to_i64(bytes: &[u8]) -> i64 {
+    match bytes.len() {
+        1 => bytes[0] as i8 as i64,
+        2 => gimli::NativeEndian::default().read_i16(bytes) as i64,
+        4 => gimli::NativeEndian::default().read_i32(bytes) as i64,
+        8 => gimli::NativeEndian::default().read_i64(bytes) as i64,
+        _ => {
+            panic!();
+        }
+    }
 }
 
 fn entry_name(dwarf: &gimli::Dwarf<Slice>, entry: &gimli::DebuggingInformationEntry<Slice>) -> String {
@@ -299,7 +312,6 @@ fn evaluate_expression(
 
 fn binary_data_for_expression(
     frame: &Frame,
-    dwarf: &gimli::Dwarf<Slice>,
     unit: &gimli::Unit<Slice>,
     exprloc: gimli::Expression<Slice>,
     byte_size: usize,
@@ -314,7 +326,7 @@ fn binary_data_for_expression(
         assert!(piece.size_in_bits.is_none(), "{:?}", piece);
         assert!(piece.bit_offset.is_none(), "{:?}", piece);
 
-        let bytes: Vec<u8> = match piece.location {
+        match piece.location {
             Empty => {
                 println!("{:indent$}piece: empty", "", indent = indent);
                 Vec::new()
@@ -335,10 +347,7 @@ fn binary_data_for_expression(
             ImplicitPointer { value, byte_offset } => {
                 panic!("{:indent$}piece: implicitptr={:?}+{:?}", "", value, byte_offset, indent = indent);
             }
-        };
-
-        println!("{:indent$}raw: {:?}", "", bytes, indent = indent);
-        bytes
+        }
     })
 }
 
