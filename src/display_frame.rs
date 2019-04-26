@@ -229,6 +229,9 @@ fn pretty_print_value(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, ty
                 }
             })
         }
+        gimli::DW_TAG_pointer_type => {
+            Some(format!("{:0ptrsize$p}", read_to_u64(bytes) as *const u8, ptrsize = bytes.len()))
+        }
         _ => {
             println!("{:indent$}tag: {}", "", ty_entry.tag().static_string().unwrap(), indent = indent + 4);
             println!("{:indent$}name: {}", "", entry_name(dwarf, &ty_entry), indent = indent + 4);
@@ -302,7 +305,18 @@ fn evaluate_expression(
                 return Ok(eval.result());
             }
             // FIXME use DW_AT_frame_base for register
-            gimli::EvaluationResult::RequiresFrameBase => res = eval.resume_with_frame_base(frame.regs[gimli::X86_64::RSP.0].unwrap()).unwrap(),
+            gimli::EvaluationResult::RequiresFrameBase => {
+                res = eval.resume_with_frame_base(frame.regs[gimli::X86_64::RSP.0].unwrap()).unwrap();
+            }
+            gimli::EvaluationResult::RequiresMemory {
+                address,
+                size,
+                space: None,
+                base_type: _,
+            } => {
+                let value = unsafe { std::slice::from_raw_parts(address as *const u8, size as usize) }.to_vec();
+                res = eval.resume_with_memory(gimli::Value::Generic(read_to_u64(&value))).unwrap();
+            }
             err => {
                 return Err(err)
             }
