@@ -282,6 +282,51 @@ fn pretty_print_value(dwarf: &gimli::Dwarf<Slice>, unit: &gimli::Unit<Slice>, ty
 
             fmt
         }
+        gimli::DW_TAG_enumeration_type => {
+            /*
+            tag: DW_TAG_enumeration_type
+                name: Format
+                attr Some("DW_AT_type") = UnitRef(UnitOffset(3569))
+                attr Some("DW_AT_enum_class") = Flag(true)
+                attr Some("DW_AT_name") = DebugStrRef(DebugStrOffset(8092230))
+                attr Some("DW_AT_byte_size") = Udata(1)
+                attr Some("DW_AT_alignment") = Udata(1)
+              tag: DW_TAG_enumerator
+                  name: Dwarf64
+                  attr Some("DW_AT_name") = DebugStrRef(DebugStrOffset(3862))
+                  attr Some("DW_AT_const_value") = Udata(0)
+              tag: DW_TAG_enumerator
+                  name: Dwarf32
+                  attr Some("DW_AT_name") = DebugStrRef(DebugStrOffset(3870))
+                  attr Some("DW_AT_const_value") = Udata(1)
+            */
+
+            let discr_val = read_to_u64(bytes);
+
+            let mut entries_tree = unit.entries_tree(Some(ty_entry.offset())).unwrap();
+            let mut children = entries_tree.root().unwrap().children();
+
+            while let Some(child) = children.next().unwrap() {
+                match child.entry().tag() {
+                    gimli::DW_TAG_enumerator => {}
+                    gimli::DW_TAG_template_type_parameter => continue,
+                    tag => panic!("{:?}", tag.static_string()),
+                }
+
+                let child_discr_val = child.entry()
+                    .attr_value(gimli::DW_AT_const_value)
+                    .unwrap()
+                    .unwrap()
+                    .udata_value()
+                    .unwrap();
+
+                if discr_val == child_discr_val {
+                    return format!("{}::{}", entry_name(dwarf, ty_entry), entry_name(dwarf, child.entry()));
+                }
+            }
+
+            format!("<invalid discr {:08x}>", discr_val)
+        }
         _ => {
             print_attrs_and_childs(dwarf, unit, ty_entry, indent + 4);
 
