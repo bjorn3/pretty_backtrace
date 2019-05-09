@@ -17,6 +17,7 @@ gimli = "0.18.0"
 addr2line = "0.9.0"
 
 backtrace = "0.3.13"
+unwind = { git = "https://github.com/gimli-rs/unwind-rs.git", optional = true }
 
 regex = "1.1.0"
 lazy_static = "1.2.0"
@@ -24,3 +25,9 @@ syntect = "3.0.2"
 rental = "0.5.2"
 findshlibs = "0.4.0"
 libc = "0.2.51"
+fallible-iterator = "0.1.0"
+
+[features]
+default = ["unwinder_backtrace"]
+unwinder_backtrace = []
+unwinder_unwind_rs = ["unwind"]
