@@ -1,6 +1,6 @@
 use findshlibs::Avma;
 
-use crate::{Address, FrameIndex};
+use crate::{Address, Frame, FrameIndex};
 
 pub fn print_backtrace() {
     let context = crate::locate_debuginfo::get_context();
@@ -19,7 +19,10 @@ pub fn print_backtrace() {
             continue;
         };
 
-        crate::display_frame::display_frame(&context, i, addr);
+        crate::display_frame::display_frame(&context, Frame {
+            index: i,
+            addr,
+        });
 
         // Wait a second each 100 frames to prevent filling the screen in case of a stackoverflow
         if i.0 % 100 == 99 {

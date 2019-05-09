@@ -1,15 +1,15 @@
 use std::path::PathBuf;
 
-use crate::{Address, FrameIndex};
+use crate::Frame;
 
-pub(crate) fn display_frame(context: &crate::Context, i: FrameIndex, addr: Address) {
-    let mut iter = context.addr2line.find_frames(addr.svma.0 as u64).unwrap();
+pub(crate) fn display_frame(context: &crate::Context, stack_frame: Frame) {
+    let mut iter = context.addr2line.find_frames(stack_frame.addr.svma.0 as u64).unwrap();
     let mut first_frame = true;
     while let Some(frame) = iter.next().unwrap() {
         let function_name = frame.function.map(|n|n.demangle().unwrap().to_string()).unwrap_or("<??>".to_string());
 
         if first_frame {
-            write_frame_line(i, &function_name, &addr, false);
+            write_frame_line(&stack_frame, &function_name, false);
         } else {
             eprintln!("      {}", function_name);
         }
@@ -23,25 +23,25 @@ pub(crate) fn display_frame(context: &crate::Context, i: FrameIndex, addr: Addre
 
     if first_frame == true {
         // No debug info
-        backtrace::resolve(addr.avma.0 as *mut _, |symbol| {
+        backtrace::resolve(stack_frame.addr.avma.0 as *mut _, |symbol| {
             if let Some(symbol_name) = symbol.name() {
                 let mangled_name = symbol_name.as_str().unwrap();
                 let name = addr2line::demangle_auto(mangled_name.into(), None);
-                write_frame_line(i, &name, &addr, false);
+                write_frame_line(&stack_frame, &name, false);
             } else {
-                write_frame_line(i, "<unknown function name>", &addr, true);
+                write_frame_line(&stack_frame, "<unknown function name>", true);
             }
         });
     }
 }
 
-fn write_frame_line(i: FrameIndex, function_name: &str, addr: &Address, err: bool) {
+fn write_frame_line(frame: &Frame, function_name: &str, err: bool) {
     eprintln!(
         "{} {}{:<80}\x1b[0m  \x1b[2m({})\x1b[0m",
-        i,
+        frame.index,
         if err { "\x1b[91m" } else { "" },
         function_name,
-        addr,
+        frame.addr,
     );
 }
 
