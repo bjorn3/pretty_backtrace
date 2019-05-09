@@ -32,7 +32,7 @@ pub fn print_backtrace() {
 
     unwind::DwarfUnwinder::default().trace(|x| {
         let mut i = FrameIndex(0);
-        while let Some(frame) = x.next().unwrap() {
+        while let Some(_frame) = x.next().unwrap() {
             let ip = x.registers()[16].unwrap();
 
             let addr = if let Some(addr) = ip_to_address(ip as *const u8, i) {
@@ -72,6 +72,6 @@ fn stackoverflow_wait(i: FrameIndex) {
     // Wait a second each 100 frames to prevent filling the screen in case of a stackoverflow
     if i.0 % 100 == 99 {
         eprintln!("Backtrace is very big, sleeping 1s...");
-        std::thread::sleep_ms(1000);
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }
