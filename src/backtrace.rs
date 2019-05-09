@@ -20,5 +20,11 @@ pub fn print_backtrace() {
         };
 
         crate::display_frame::display_frame(&context, i, addr);
+
+        // Wait a second each 100 frames to prevent filling the screen in case of a stackoverflow
+        if i.0 % 100 == 99 {
+            eprintln!("Backtrace is very big, sleeping 1s...");
+            std::thread::sleep_ms(1000);
+        }
     }
 }
