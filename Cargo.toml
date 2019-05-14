@@ -29,6 +29,7 @@ fallible-iterator = "0.1.0"
 [dependencies.unwind]
 git = "https://github.com/gimli-rs/unwind-rs.git"
 optional = true
+rev = "39a0642651041da397558e7d41bd699e4b0706dc"
 default-features = false # Disable libunwind shim
 
 [features]
