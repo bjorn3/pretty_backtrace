@@ -13,9 +13,11 @@ rust:
 
 script:
   - cargo test
-  - cargo test --features unwinder_unwind_rs --no-default-features
   - cargo run --example simple || true
-  - cargo run --example simple --features unwinder_unwind_rs --no-default-features || true
+  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then
+    cargo test --features unwinder_unwind_rs --no-default-features;
+    cargo run --example simple --features unwinder_unwind_rs --no-default-features || true;
+    fi
 
 env:
 - RUST_BACKTRACE=pretty
