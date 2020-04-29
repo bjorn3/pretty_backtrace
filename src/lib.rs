@@ -70,9 +70,6 @@ fn the_hook(info: &PanicInfo) {
 
     crate::backtrace::print_backtrace();
 
-    eprintln!();
-    (*HOOK)(info);
-
     IS_PROCESSING_PANIC.with(|is_processing_panic| is_processing_panic.set(false));
 }
 
