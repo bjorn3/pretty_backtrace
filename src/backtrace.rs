@@ -27,7 +27,7 @@ pub fn print_backtrace() {
         // Wait a second each 100 frames to prevent filling the screen in case of a stackoverflow
         if i.0 % 100 == 99 {
             eprintln!("Backtrace is very big, sleeping 1s...");
-            std::thread::sleep_ms(1000);
+            std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }
 }
