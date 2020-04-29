@@ -30,4 +30,5 @@ pub fn print_backtrace() {
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }
+    crate::var_guard::print_all();
 }

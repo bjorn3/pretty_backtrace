@@ -18,6 +18,8 @@ pub(crate) fn display_frame(context: &crate::Context, stack_frame: Frame) {
 
         print_location(frame.location, show_source);
 
+        crate::var_guard::print_values(context, stack_frame.addr.svma);
+
         first_frame = false;
     }
 

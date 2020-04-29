@@ -3,8 +3,12 @@ extern crate rental;
 
 mod backtrace;
 mod display_frame;
+mod dwarf;
 mod syntax_highlight;
 mod locate_debuginfo;
+
+#[doc(hidden)]
+pub mod var_guard;
 
 use std::cell::Cell;
 use std::fmt;
