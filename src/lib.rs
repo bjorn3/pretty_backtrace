@@ -88,8 +88,9 @@ impl fmt::Display for FrameIndex {
 struct Frame {
     index: FrameIndex,
     addr: Address,
+    #[cfg(feature = "unwinder_unwind_rs")]
+    regs: unwind::Registers,
 }
-
 
 #[derive(Clone)]
 struct Address {
