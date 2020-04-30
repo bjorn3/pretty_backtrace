@@ -7,7 +7,7 @@ use object::Object;
 
 pub struct Context {
     pub addr2line: addr2line::Context,
-    pub dwarf: gimli::read::Dwarf<gimli::EndianRcSlice<gimli::RunTimeEndian>>,
+    pub dwarf_context: crate::dwarf::DwarfContext,
 }
 
 pub fn get_context() -> Context {
@@ -48,7 +48,7 @@ pub fn get_context_for_file(file_name: &Path) -> Context {
 
     Context {
         addr2line,
-        dwarf,
+        dwarf_context: crate::dwarf::DwarfContext::new(dwarf),
     }
 }
 

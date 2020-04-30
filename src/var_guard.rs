@@ -42,11 +42,11 @@ macro_rules! var_guard {
 
 use crate::dwarf::*;
 
-pub(crate) fn print_values(context: &crate::Context, svma: findshlibs::Svma) {
+pub(crate) fn print_values(context: &crate::dwarf::DwarfContext, svma: findshlibs::Svma) {
     let mut val_guard_count = 0;
 
     use gimli::read::Reader;
-    let unit = if let Some(unit) = find_unit_for_svma(&context.dwarf, svma).unwrap() {
+    let unit = if let Some(unit) = find_unit_for_svma(context, svma).unwrap() {
         unit
     } else {
         return;
