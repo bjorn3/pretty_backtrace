@@ -102,14 +102,14 @@ fn print_location(location: Option<addr2line::Location>, mut show_source: bool) 
                     return;
                 };
 
-                for (line_num, line_str) in highlighted.iter().enumerate().map(|(line_num, line_str)|(line_num as u64 + 1, line_str)) {
+                for (line_num, line_str) in highlighted.iter().enumerate().map(|(line_num, line_str)|(line_num as u32 + 1, line_str)) {
                     if line_num < line - 2 || line_num > line + 2 {
                         continue;
                     }
 
-                    let line_marker = if line_num as u64 == line { "\x1b[91m>\x1b[0m" } else { " \x1b[2m" };
+                    let line_marker = if line_num == line { "\x1b[91m>\x1b[0m" } else { " \x1b[2m" };
                     eprintln!("{} {:>6} | {}", line_marker, line_num, crate::syntax_highlight::as_16_bit_terminal_escaped(line_str));
-                    if line_num as u64 == line && location.column.is_some() {
+                    if line_num == line && location.column.is_some() {
                         eprintln!("         | {:width$}\x1b[91m^\x1b[0m", " ", width=location.column.unwrap() as usize);
                     }
                 }

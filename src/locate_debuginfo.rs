@@ -6,7 +6,7 @@ use std::rc::Rc;
 use object::Object;
 
 pub struct Context {
-    pub addr2line: addr2line::Context,
+    pub addr2line: addr2line::Context<crate::dwarf::Slice>,
     pub dwarf_context: crate::dwarf::DwarfContext,
 }
 
