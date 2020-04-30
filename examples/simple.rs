@@ -13,5 +13,13 @@ fn please_panic(num: u64) {
     let num3 = *num;
     pretty_backtrace::var_guard!(num3);
     let _ = num3;
+    inner();
+}
+
+#[inline(always)]
+fn inner() {
+    let num = 41;
+    pretty_backtrace::var_guard!(num);
+    let _ = num;
     panic!("Some message");
 }

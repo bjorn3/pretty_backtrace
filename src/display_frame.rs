@@ -6,7 +6,7 @@ pub(crate) fn display_frame(context: &crate::Context, stack_frame: Frame) {
     let mut iter = context.addr2line.find_frames(stack_frame.addr.svma.0 as u64).unwrap();
     let mut first_frame = true;
     while let Some(frame) = iter.next().unwrap() {
-        let function_name = frame.function.map(|n|n.demangle().unwrap().to_string()).unwrap_or("<??>".to_string());
+        let function_name = frame.function.as_ref().map(|n|n.demangle().unwrap().to_string()).unwrap_or("<??>".to_string());
 
         if first_frame {
             write_frame_line(&stack_frame, &function_name, false);
@@ -16,9 +16,9 @@ pub(crate) fn display_frame(context: &crate::Context, stack_frame: Frame) {
 
         let show_source = !function_name.starts_with("pretty_backtrace::");
 
-        print_location(frame.location, show_source);
+        print_location(frame.location.as_ref(), show_source);
 
-        crate::var_guard::print_values(&context.dwarf_context, stack_frame.addr.svma);
+        crate::var_guard::print_values(context, stack_frame.addr.svma, &frame);
 
         first_frame = false;
     }
@@ -62,7 +62,7 @@ lazy_static::lazy_static! {
     };
 }
 
-fn print_location(location: Option<addr2line::Location>, mut show_source: bool) {
+fn print_location(location: Option<&addr2line::Location>, mut show_source: bool) {
     let location = if let Some(location) = location {
         location
     } else {

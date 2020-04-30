@@ -42,27 +42,43 @@ macro_rules! var_guard {
 
 use crate::dwarf::*;
 
-pub(crate) fn print_values(context: &crate::dwarf::DwarfContext, svma: findshlibs::Svma) {
+pub(crate) fn print_values(context: &crate::Context, svma: findshlibs::Svma, frame: &addr2line::Frame<Slice>) {
     let mut val_guard_count = 0;
 
     use gimli::read::Reader;
-    let unit = if let Some(unit) = find_unit_for_svma(context, svma).unwrap() {
+    let unit = if let Some(unit) = context.addr2line.find_dw_unit(svma.0 as u64) {
         unit
     } else {
         return;
     };
 
-    if let Some(entry) = find_die_for_svma(&context.dwarf, &unit, svma).unwrap() {
-        let _: Option<()> = search_tree(&unit, Some(entry.offset()), |entry, indent| {
+    if let Some(dw_die_offset) = frame.dw_die_offset {
+        let _: Option<()> = search_tree(&unit, Some(dw_die_offset), |entry, indent| {
+            if entry.tag() == gimli::DW_TAG_inlined_subroutine && entry.offset() != dw_die_offset {
+                return Ok(SearchAction::SkipChildren); // Already visited by addr2line frame iter
+            }
+
             if entry.tag() == gimli::DW_TAG_lexical_block {
-                if !in_range(&context.dwarf, &unit, Some(&entry), svma)? {
+                if !in_range(context.addr2line.dwarf(), &unit, Some(&entry), svma)? {
                     return Ok(SearchAction::SkipChildren);
                 }
             }
 
             if entry.tag() == gimli::DW_TAG_variable {
+                let mut cursor;
+                let entry = if let Some(origin) = entry.attr(gimli::DW_AT_abstract_origin).unwrap() {
+                    let origin = match origin.value() {
+                        gimli::AttributeValue::UnitRef(offset) => offset,
+                        _ => panic!("{:?}", origin.value()),
+                    };
+                    cursor = unit.entries_at_offset(origin).unwrap();
+                    cursor.next_entry().unwrap().unwrap();
+                    cursor.current().unwrap()
+                } else {
+                    &entry
+                };
                 let name = if let Some(name) = entry.attr(gimli::DW_AT_name).unwrap() {
-                    name.string_value(&context.dwarf.debug_str).unwrap().to_string().unwrap().into_owned()
+                    name.string_value(&context.addr2line.dwarf().debug_str).unwrap().to_string().unwrap().into_owned()
                 } else {
                     "<unknown name>".to_string()
                 };
@@ -74,7 +90,7 @@ pub(crate) fn print_values(context: &crate::dwarf::DwarfContext, svma: findshlib
 
             Ok(SearchAction::VisitChildren)
         }).unwrap();
-    };
+    }
 
     while val_guard_count > 0 {
         val_guard_count -= 1;

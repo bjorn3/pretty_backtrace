@@ -1,13 +1,8 @@
-use std::borrow::Cow;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
-
-use object::Object;
 
 pub struct Context {
     pub addr2line: addr2line::Context<crate::dwarf::Slice>,
-    pub dwarf_context: crate::dwarf::DwarfContext,
 }
 
 pub fn get_context() -> Context {
@@ -32,23 +27,8 @@ pub fn get_context_for_file(file_name: &Path) -> Context {
     let debug_file = object::File::parse(&debug_file).expect("parse file");
     let addr2line = addr2line::Context::new(&debug_file).expect("create context");
 
-    let endian = if debug_file.is_little_endian() {
-        gimli::RunTimeEndian::Little
-    } else {
-        gimli::RunTimeEndian::Big
-    };
-
-    let dwarf = gimli::read::Dwarf::load(
-        |sect_id| {
-            let data = debug_file.section_data_by_name(sect_id.name()).unwrap_or(Cow::Borrowed(&[]));
-            Ok(gimli::EndianRcSlice::new(Rc::from(&*data), endian))
-        },
-        |_| Ok::<_, ()>(gimli::EndianRcSlice::new(Rc::from([]), endian)),
-    ).unwrap();
-
     Context {
         addr2line,
-        dwarf_context: crate::dwarf::DwarfContext::new(dwarf),
     }
 }
 

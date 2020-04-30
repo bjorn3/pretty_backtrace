@@ -1,70 +1,6 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use gimli::{DebuggingInformationEntry, Dwarf, Range, Unit};
+use gimli::{DebuggingInformationEntry, Dwarf, Unit};
 
 pub type Slice = gimli::EndianRcSlice<gimli::RunTimeEndian>;
-
-pub struct UnitMap {
-    cached: RefCell<Vec<(Range, gimli::Result<Rc<Unit<Slice>>>)>>,
-    iter: RefCell<gimli::CompilationUnitHeadersIter<Slice>>,
-}
-
-impl UnitMap {
-    pub fn new(iter: gimli::CompilationUnitHeadersIter<Slice>) -> Self {
-        UnitMap {
-            cached: RefCell::new(Vec::new()),
-            iter: RefCell::new(iter),
-        }
-    }
-
-    pub fn find(
-        &self,
-        dwarf: &Dwarf<Slice>,
-        svma: findshlibs::Svma,
-    ) -> gimli::Result<Option<Rc<Unit<Slice>>>> {
-        for (range, item) in self.cached.borrow().iter() {
-            if range.begin <= svma.0 as u64 && range.end > svma.0 as u64 {
-                return Ok(Some(item.clone()?));
-            }
-        }
-
-        while let Some(unit) = self.iter.borrow_mut().next()? {
-            let unit = Unit::new(&dwarf, unit)?;
-            let unit = Rc::new(unit);
-            let mut ranges = dwarf.unit_ranges(&unit)?;
-
-            let mut found = false;
-            while let Some(range) = ranges.next()? {
-                if range.begin <= svma.0 as u64 && range.end > svma.0 as u64 {
-                    found = true;
-                }
-                self.cached.borrow_mut().push((range, Ok(unit.clone())));
-            }
-
-            if found {
-                return Ok(Some(unit));
-            }
-        }
-
-        Ok(None)
-    }
-}
-
-pub struct DwarfContext {
-    pub dwarf: Dwarf<Slice>,
-    pub units: UnitMap,
-}
-
-impl DwarfContext {
-    pub fn new(dwarf: Dwarf<Slice>) -> Self {
-        let units = UnitMap::new(dwarf.units());
-        DwarfContext {
-            dwarf,
-            units,
-        }
-    }
-}
 
 pub fn in_range(dwarf: &Dwarf<Slice>, unit: &Unit<Slice>, entry: Option<&DebuggingInformationEntry<Slice>>, svma: findshlibs::Svma) -> gimli::Result<bool> {
     if let Some(entry) = entry {
@@ -86,29 +22,8 @@ pub fn in_range(dwarf: &Dwarf<Slice>, unit: &Unit<Slice>, entry: Option<&Debuggi
     Ok(false)
 }
 
-pub fn find_unit_for_svma(context: &DwarfContext, svma: findshlibs::Svma) -> gimli::Result<Option<Rc<Unit<Slice>>>> {
-    Ok(context.units.find(&context.dwarf, svma)?)
-}
-
-pub fn find_die_for_svma<'dwarf, 'unit: 'dwarf>(
-    dwarf: &'dwarf Dwarf<Slice>,
-    unit: &'unit Unit<Slice>,
-    svma: findshlibs::Svma,
-) -> gimli::Result<Option<DebuggingInformationEntry<'dwarf, 'unit, Slice>>> {
-    search_tree(unit, None, |entry, _indent| {
-        if in_range(dwarf, unit, Some(&entry), svma)? {
-            if entry.tag() == gimli::DW_TAG_subprogram {
-                Ok(SearchAction::Found(entry))
-            } else {
-                Ok(SearchAction::VisitChildren)
-            }
-        } else {
-            Ok(SearchAction::VisitChildren)
-        }
-    })
-}
-
 pub enum SearchAction<T> {
+    #[allow(dead_code)] // FIXME
     Found(T),
     VisitChildren,
     SkipChildren,
