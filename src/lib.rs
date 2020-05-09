@@ -86,11 +86,15 @@ impl fmt::Display for FrameIndex {
     }
 }
 
-struct Frame {
+struct StackFrame {
     index: FrameIndex,
     addr: Address,
 }
 
+struct SubFrame<'a> {
+    stack_frame: &'a StackFrame,
+    addr2line_frame: &'a addr2line::Frame<'a, crate::dwarf::Slice>,
+}
 
 #[derive(Clone)]
 struct Address {

@@ -42,24 +42,24 @@ macro_rules! var_guard {
 
 use crate::dwarf::*;
 
-pub(crate) fn print_values(context: &crate::Context, svma: findshlibs::Svma, frame: &addr2line::Frame<Slice>) {
+pub(crate) fn print_values(context: &crate::Context, frame: &crate::SubFrame) {
     let mut val_guard_count = 0;
 
     use gimli::read::Reader;
-    let unit = if let Some(unit) = context.addr2line.find_dwarf_unit(svma.0 as u64) {
+    let unit = if let Some(unit) = context.addr2line.find_dwarf_unit(frame.stack_frame.addr.svma.0 as u64) {
         unit
     } else {
         return;
     };
 
-    if let Some(dw_die_offset) = frame.dw_die_offset {
+    if let Some(dw_die_offset) = frame.addr2line_frame.dw_die_offset {
         let _: Option<()> = search_tree(&unit, Some(dw_die_offset), |entry, indent| {
             if entry.tag() == gimli::DW_TAG_inlined_subroutine && entry.offset() != dw_die_offset {
                 return Ok(SearchAction::SkipChildren); // Already visited by addr2line frame iter
             }
 
             if entry.tag() == gimli::DW_TAG_lexical_block {
-                if !in_range(context.addr2line.dwarf(), &unit, Some(&entry), svma)? {
+                if !in_range(context.addr2line.dwarf(), &unit, Some(&entry), frame.stack_frame.addr.svma)? {
                     return Ok(SearchAction::SkipChildren);
                 }
             }

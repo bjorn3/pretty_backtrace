@@ -1,50 +1,41 @@
 use std::path::PathBuf;
 
-use crate::Frame;
+use crate::{Context, StackFrame, SubFrame};
 
-pub(crate) fn display_frame(context: &crate::Context, stack_frame: Frame) {
-    let mut iter = context.addr2line.find_frames(stack_frame.addr.svma.0 as u64).unwrap();
-    let mut first_frame = true;
-    while let Some(frame) = iter.next().unwrap() {
-        let function_name = frame.function.as_ref().map(|n|n.demangle().unwrap().to_string()).unwrap_or("<??>".to_string());
-
-        if first_frame {
-            write_frame_line(&stack_frame, &function_name, false);
-        } else {
-            eprintln!("      {}", function_name);
-        }
-
-        let show_source = !function_name.starts_with("pretty_backtrace::");
-
-        print_location(frame.location.as_ref(), show_source);
-
-        crate::var_guard::print_values(context, stack_frame.addr.svma, &frame);
-
-        first_frame = false;
+pub(crate) fn display_subframe(
+    context: &Context,
+    stack_frame: &StackFrame,
+    addr2line_frame: Option<&addr2line::Frame<'_, crate::dwarf::Slice>>,
+    first_frame: bool,
+    name: &str,
+    err: bool,
+) {
+    if first_frame {
+        eprintln!(
+            "{} {}{:<80}\x1b[0m  \x1b[2m({})\x1b[0m",
+            stack_frame.index,
+            if err { "\x1b[91m" } else { "" },
+            name,
+            stack_frame.addr,
+        );
+    } else {
+        eprintln!("      {}", name);
     }
 
-    if first_frame == true {
-        // No debug info
-        backtrace::resolve(stack_frame.addr.avma.0 as *mut _, |symbol| {
-            if let Some(symbol_name) = symbol.name() {
-                let mangled_name = symbol_name.as_str().unwrap();
-                let name = addr2line::demangle_auto(mangled_name.into(), None);
-                write_frame_line(&stack_frame, &name, false);
-            } else {
-                write_frame_line(&stack_frame, "<unknown function name>", true);
-            }
-        });
-    }
-}
+    if let Some(addr2line_frame) = addr2line_frame {
+        let frame = SubFrame {
+            stack_frame,
+            addr2line_frame,
+        };
 
-fn write_frame_line(frame: &Frame, function_name: &str, err: bool) {
-    eprintln!(
-        "{} {}{:<80}\x1b[0m  \x1b[2m({})\x1b[0m",
-        frame.index,
-        if err { "\x1b[91m" } else { "" },
-        function_name,
-        frame.addr,
-    );
+        let show_source =
+            !name.starts_with("pretty_backtrace::")
+            && !name.starts_with("std::panic")
+            && !name.starts_with("std::rt");
+        print_location(frame.addr2line_frame.location.as_ref(), show_source);
+
+        crate::var_guard::print_values(context, &frame);
+    }
 }
 
 lazy_static::lazy_static! {
