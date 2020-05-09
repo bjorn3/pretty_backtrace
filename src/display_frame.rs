@@ -110,7 +110,7 @@ fn print_location(location: Option<&addr2line::Location>, mut show_source: bool)
                     let line_marker = if line_num == line { "\x1b[91m>\x1b[0m" } else { " \x1b[2m" };
                     eprintln!("{} {:>6} | {}", line_marker, line_num, crate::syntax_highlight::as_16_bit_terminal_escaped(line_str));
                     if line_num == line && location.column.is_some() {
-                        eprintln!("         | {:width$}\x1b[91m^\x1b[0m", " ", width=location.column.unwrap() as usize);
+                        eprintln!("         | {:width$}\x1b[91m^\x1b[0m", " ", width=location.column.unwrap() as usize - 1);
                     }
                 }
             });
