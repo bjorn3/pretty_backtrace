@@ -12,9 +12,9 @@ Pretty colored backtraces for Rust.
 readme = "README.md"
 
 [dependencies]
-object = "0.17.0"
+object = "0.18.0"
 gimli = "0.20.0"
-addr2line = "0.11.0"
+addr2line = { git = "https://github.com/gimli-rs/addr2line.git" }
 
 backtrace = "0.3.13"
 

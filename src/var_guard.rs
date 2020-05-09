@@ -46,7 +46,7 @@ pub(crate) fn print_values(context: &crate::Context, svma: findshlibs::Svma, fra
     let mut val_guard_count = 0;
 
     use gimli::read::Reader;
-    let unit = if let Some(unit) = context.addr2line.find_dw_unit(svma.0 as u64) {
+    let unit = if let Some(unit) = context.addr2line.find_dwarf_unit(svma.0 as u64) {
         unit
     } else {
         return;
