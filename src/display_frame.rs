@@ -92,28 +92,30 @@ fn print_location(location: Option<&addr2line::Location>, mut show_source: bool)
         file
     };
 
-    if show_source {
-        if let Some(line) = location.line {
-            crate::syntax_highlight::with_highlighted_source(PathBuf::from(file.clone()), move |highlighted| {
-                let highlighted = if let Some(highlighted) = highlighted {
-                    highlighted
-                } else {
-                    eprintln!("          \x1b[91m<file not found>\x1b[0m");
-                    return;
-                };
+    if !show_source {
+        return;
+    }
 
-                for (line_num, line_str) in highlighted.iter().enumerate().map(|(line_num, line_str)|(line_num as u32 + 1, line_str)) {
-                    if line_num < line - 2 || line_num > line + 2 {
-                        continue;
-                    }
+    if let Some(line) = location.line {
+        crate::syntax_highlight::with_highlighted_source(PathBuf::from(file.clone()), move |highlighted| {
+            let highlighted = if let Some(highlighted) = highlighted {
+                highlighted
+            } else {
+                eprintln!("          \x1b[91m<file not found>\x1b[0m");
+                return;
+            };
 
-                    let line_marker = if line_num == line { "\x1b[91m>\x1b[0m" } else { " \x1b[2m" };
-                    eprintln!("{} {:>6} | {}", line_marker, line_num, crate::syntax_highlight::as_16_bit_terminal_escaped(line_str, line_num != line));
-                    if line_num == line && location.column.is_some() {
-                        eprintln!("         | {:width$}\x1b[91m^\x1b[0m", " ", width=location.column.unwrap() as usize - 1);
-                    }
+            for (line_num, line_str) in highlighted.iter().enumerate().map(|(line_num, line_str)|(line_num as u32 + 1, line_str)) {
+                if line_num < line - 2 || line_num > line + 2 {
+                    continue;
                 }
-            });
-        }
+
+                let line_marker = if line_num == line { "\x1b[91m>\x1b[0m" } else { " \x1b[2m" };
+                eprintln!("{} {:>6} | {}", line_marker, line_num, crate::syntax_highlight::as_16_bit_terminal_escaped(line_str, line_num != line));
+                if line_num == line && location.column.is_some() {
+                    eprintln!("         | {:width$}\x1b[91m^\x1b[0m", " ", width=location.column.unwrap() as usize - 1);
+                }
+            }
+        });
     }
 }
