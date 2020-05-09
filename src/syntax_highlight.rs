@@ -64,8 +64,10 @@ fn syntax_highlight(src: &str) -> Vec<Vec<(Style, &str)>> {
     lines
 }
 
-pub fn as_16_bit_terminal_escaped(v: &[(Style, &str)]) -> String {
+pub fn as_16_bit_terminal_escaped(v: &[(Style, &str)], dimmed: bool) -> String {
     use std::fmt::Write;
+
+    let div = if dimmed { 5 } else { 4 };
 
     let mut s: String = String::new();
     for &(ref style, text) in v.iter() {
@@ -73,7 +75,7 @@ pub fn as_16_bit_terminal_escaped(v: &[(Style, &str)]) -> String {
         write!(
             s,
             "\x1b[38;5;{}m{}",
-            16u8 + 36 * (style.foreground.r / 42) + 6 * (style.foreground.g / 42) + (style.foreground.b / 42),
+            16u8 + 36 * (style.foreground.r / 42 * 4 / div) + 6 * (style.foreground.g / 42 * 4 / div) + (style.foreground.b / 42 * 4 / div),
             text
         ).unwrap();
     }
