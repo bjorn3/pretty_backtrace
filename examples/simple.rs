@@ -1,6 +1,8 @@
 fn main() {
     pretty_backtrace::force_setup();
-    assert!(std::panic::catch_unwind(|| please_panic(42)).is_err());
+    std::thread::spawn(|| {
+        assert!(std::panic::catch_unwind(|| please_panic(42)).is_err());
+    }).join().unwrap();
 }
 
 fn please_panic(num: u64) {
@@ -21,5 +23,5 @@ fn inner() {
     let num = 41;
     pretty_backtrace::var_guard!(num);
     let _ = num;
-    panic!("Some message");
+    None::<()>.unwrap();
 }
